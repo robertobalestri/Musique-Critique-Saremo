@@ -1,7 +1,8 @@
 import React from 'react';
 import { AnalysisResponse, PersonaId } from '../types';
 import { PERSONAS } from '../constants';
-import { Quote, Star, Share2, RefreshCw, AlertTriangle, TrendingUp, Music, FileText } from 'lucide-react';
+import { Quote, Star, Share2, RefreshCw, AlertTriangle, TrendingUp, Music, FileText, Download } from 'lucide-react';
+import { exportToCSV } from '../services/exportService';
 
 interface CritiqueViewProps {
   result: AnalysisResponse;
@@ -184,6 +185,15 @@ const CritiqueView: React.FC<CritiqueViewProps> = ({ result, personaId, onReset 
           <RefreshCw size={20} />
           Nuova Analisi
         </button>
+
+        <button
+          onClick={() => exportToCSV({ [personaId]: result }, `analisi_${persona.name.replace(/\s+/g, '_')}_${Date.now()}.csv`)}
+          className="flex items-center gap-2 px-8 py-4 bg-gray-800 hover:bg-gray-700 text-white rounded-full transition-all hover:scale-105 font-medium shadow-lg"
+        >
+          <Download size={20} />
+          Esporta CSV
+        </button>
+
         <button className="flex items-center gap-2 px-8 py-4 border border-gray-700 hover:bg-gray-800 text-gray-300 rounded-full transition-all hover:scale-105 font-medium">
           <Share2 size={20} />
           Condividi

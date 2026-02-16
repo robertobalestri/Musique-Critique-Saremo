@@ -1,15 +1,17 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, Music, Users, X, Activity } from 'lucide-react';
+import { Upload, FileText, Music, Users, X, Activity, AlignLeft, CheckCircle2 } from 'lucide-react';
 
 interface AnalysisFormProps {
-  onAnalyze: (audio: File, bio: string, analyzeAll: boolean) => void;
+  onAnalyze: (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string) => void;
   onAudioAnalysis: (audio: File) => void;
   isLoading: boolean;
 }
 
 const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalyze, onAudioAnalysis, isLoading }) => {
   const [bio, setBio] = useState('');
+  const [lyrics, setLyrics] = useState('');
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [isTextOnly, setIsTextOnly] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const validateAndSetFile = (file: File) => {
@@ -46,23 +48,56 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalyze, onAudioAnalysis,
 
   const handleSubmit = (e: React.FormEvent, analyzeAll: boolean) => {
     e.preventDefault();
-    if (audioFile) {
-      onAnalyze(audioFile, bio, analyzeAll);
+
+    if (isTextOnly) {
+      if (!lyrics.trim()) {
+        alert("Inserisci il testo per l'analisi testuale.");
+        return;
+      }
+      onAnalyze(undefined, bio, analyzeAll, lyrics);
+    } else {
+      if (!audioFile) {
+        alert("Carica un file audio.");
+        return;
+      }
+      onAnalyze(audioFile, bio, analyzeAll, lyrics);
     }
   };
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
 
-      {/* Audio Upload Area */}
+      {/* Mode Toggle */}
+      <div className="flex justify-end">
+        <label className="flex items-center gap-3 cursor-pointer group">
+          <span className={`text-sm font-medium transition-colors ${isTextOnly ? 'text-white' : 'text-gray-400 group-hover:text-gray-300'}`}>
+            Analisi Solo Testuale
+          </span>
+          <div className="relative">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={isTextOnly}
+              onChange={(e) => {
+                setIsTextOnly(e.target.checked);
+                if (e.target.checked) setAudioFile(null); // Optional: Clear audio when switching to text only
+              }}
+            />
+            <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+          </div>
+        </label>
+      </div>
+
+      {/* Audio Upload Area (Conditional opacity) */}
       <div
         className={`
-border - 2 border - dashed rounded - 2xl p - 8 text - center transition - colors cursor - pointer
+          border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300
+          ${isTextOnly ? 'opacity-40 grayscale pointer-events-none' : 'cursor-pointer'}
           ${audioFile ? 'border-accent-primary bg-accent-primary/10' : 'border-gray-700 hover:border-gray-500 hover:bg-dark-surface'}
-`}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
+        `}
+        onDragOver={(e) => !isTextOnly && e.preventDefault()}
+        onDrop={(e) => !isTextOnly && handleDrop(e)}
+        onClick={() => !isTextOnly && fileInputRef.current?.click()}
       >
         <input
           type="file"
@@ -70,6 +105,7 @@ border - 2 border - dashed rounded - 2xl p - 8 text - center transition - colors
           onChange={handleFileChange}
           accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac"
           className="hidden"
+          disabled={isTextOnly}
         />
 
         {audioFile ? (
@@ -94,23 +130,40 @@ border - 2 border - dashed rounded - 2xl p - 8 text - center transition - colors
           <div className="flex flex-col items-center">
             <Upload className="text-gray-500 mb-4" size={40} />
             <p className="text-lg font-medium text-gray-300">Carica la tua canzone</p>
-            <p className="text-sm text-gray-500 mt-2">Trascina qui il file o clicca per selezionare (MP3, WAV)</p>
-            <p className="text-xs text-gray-600 mt-1">Max 100MB</p>
+            <p className="text-sm text-gray-500 mt-2">
+              {isTextOnly ? "Disabilitato in modalità testo" : "Trascina qui il file o clicca per selezionare (MP3, WAV)"}
+            </p>
           </div>
         )}
+      </div>
+
+      {/* Lyrics Input */}
+      <div className={`bg-dark-surface rounded-xl p-6 border transition-colors ${isTextOnly ? 'border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.1)]' : 'border-gray-800'}`}>
+        <div className="flex items-center gap-2 mb-4">
+          <AlignLeft className={isTextOnly ? "text-indigo-400" : "text-gray-500"} size={20} />
+          <h3 className={`font-semibold ${isTextOnly ? "text-white" : "text-gray-400"}`}>
+            Testo / Lyrics {isTextOnly && <span className="text-xs text-indigo-400 ml-2 uppercase tracking-wider border border-indigo-500/30 px-2 py-0.5 rounded">Obbligatorio</span>}
+          </h3>
+        </div>
+        <textarea
+          value={lyrics}
+          onChange={(e) => setLyrics(e.target.value)}
+          placeholder={isTextOnly ? "Incolla qui il testo della canzone per analizzarlo..." : "Incolla qui il testo (opzionale, aiuta la comprensione)..."}
+          className="w-full bg-dark-bg border border-gray-700 rounded-lg p-4 text-gray-300 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 h-40 resize-y transition-all placeholder-gray-600 font-mono text-sm leading-relaxed"
+        />
       </div>
 
       {/* Bio Input */}
       <div className="bg-dark-surface rounded-xl p-6 border border-gray-800">
         <div className="flex items-center gap-2 mb-4">
           <FileText className="text-accent-secondary" size={20} />
-          <h3 className="font-semibold text-gray-200">Biografia Artista</h3>
+          <h3 className="font-semibold text-gray-200">Biografia Artista / Contesto</h3>
         </div>
         <textarea
           value={bio}
           onChange={(e) => setBio(e.target.value)}
-          placeholder="Incolla qui la biografia dell'artista o una breve descrizione del progetto..."
-          className="w-full bg-dark-bg border border-gray-700 rounded-lg p-4 text-gray-300 focus:outline-none focus:border-accent-secondary focus:ring-1 focus:ring-accent-secondary h-32 resize-none transition-all placeholder-gray-600"
+          placeholder="Racconta qualcosa sull'artista, sul brano o sul genere..."
+          className="w-full bg-dark-bg border border-gray-700 rounded-lg p-4 text-gray-300 focus:outline-none focus:border-accent-secondary focus:ring-1 focus:ring-accent-secondary h-24 resize-none transition-all placeholder-gray-600"
         />
       </div>
 
@@ -118,10 +171,10 @@ border - 2 border - dashed rounded - 2xl p - 8 text - center transition - colors
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <button
           onClick={(e) => handleSubmit(e, false)}
-          disabled={!audioFile || isLoading}
+          disabled={isLoading || (isTextOnly ? !lyrics.trim() : !audioFile)}
           className={`
             py-4 rounded-xl font-bold text-sm lg:text-base shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95
-            ${!audioFile || isLoading
+            ${isLoading || (isTextOnly ? !lyrics.trim() : !audioFile)
               ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
               : 'bg-white text-black hover:bg-gray-200'}
           `}
@@ -131,10 +184,10 @@ border - 2 border - dashed rounded - 2xl p - 8 text - center transition - colors
 
         <button
           onClick={(e) => handleSubmit(e, true)}
-          disabled={!audioFile || isLoading}
+          disabled={isLoading || (isTextOnly ? !lyrics.trim() : !audioFile)}
           className={`
             py-4 rounded-xl font-bold text-sm lg:text-base shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95
-            ${!audioFile || isLoading
+            ${isLoading || (isTextOnly ? !lyrics.trim() : !audioFile)
               ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
               : 'bg-gradient-to-r from-accent-primary to-accent-secondary text-white hover:opacity-90 hover:shadow-accent-primary/25'}
           `}
@@ -155,14 +208,15 @@ border - 2 border - dashed rounded - 2xl p - 8 text - center transition - colors
           )}
         </button>
 
+        {/* Technical Analysis - Only visible if audio exists */}
         <button
           type="button"
           onClick={() => audioFile && onAudioAnalysis(audioFile)}
-          disabled={!audioFile || isLoading}
+          disabled={!audioFile || isLoading || isTextOnly}
           className={`
             py-4 rounded-xl font-bold text-sm lg:text-base shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 border-2
-            ${!audioFile || isLoading
-              ? 'border-gray-800 text-gray-600 cursor-not-allowed'
+            ${!audioFile || isLoading || isTextOnly
+              ? 'border-gray-800 text-gray-600 cursor-not-allowed opacity-50'
               : 'border-blue-500 text-blue-400 hover:bg-blue-500/10'}
           `}
         >

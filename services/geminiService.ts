@@ -37,16 +37,22 @@ const getMimeType = (file: File): string => {
 };
 
 export const analyzeSong = async (
-  audioFile: File,
+  audioFile: File | undefined,
   bio: string,
   personaId: PersonaId,
-  audioFeatures?: string // New parameter (optional)
+  audioFeatures?: string, // New parameter (optional)
+  lyrics?: string // New parameter (optional)
 ): Promise<AnalysisResponse> => {
   const ai = getModel();
   const persona = PERSONAS[personaId];
 
-  const audioBase64 = await fileToGenerativePart(audioFile);
-  const mimeType = getMimeType(audioFile);
+  let audioBase64: string | null = null;
+  let mimeType: string | null = null;
+
+  if (audioFile) {
+    audioBase64 = await fileToGenerativePart(audioFile);
+    mimeType = getMimeType(audioFile);
+  }
 
   /* Generiamo dinamicamente la sezione della rubrica basata sul JSON del critico */
   const rubricList = Object.entries(persona.rubric)
@@ -65,14 +71,11 @@ export const analyzeSong = async (
     La tua funzione è applicare la rubrica di valutazione fornita con obiettività (filtrata attraverso la tua personalità), equità e profonda conoscenza musicale.
 
     **DATI TECNICI AUDIO (SOLO PER TUO RIFERIMENTO):**
-    ${audioFeatures ? audioFeatures : "Nessun dato tecnico disponibile."}
+    ${audioFeatures ? audioFeatures : "Nessun dato tecnico disponibile (Analisi forse solo testuale)."}
     
     **ISTRUZIONE CRITICA SUI DATI TECNICI:**
     Usa questi dati per *informare* la tua analisi, ma **NON CITARE MAI I NUMERI ESPLICITAMENTE**.
-    - Esempio SI: "Il ritmo è incalzante e frenetico..." (se BPM > 130).
-    - Esempio NO: "Il BPM è 140 quindi è veloce."
-    - Esempio SI: "La produzione suona piatta e priva di dinamica..." (se Dynamic Contrast è basso).
-    - Esempio NO: "Il contrasto dinamico è solo 0.05."
+    ${!audioFile ? "**ATTENZIONE: Stai analizzando SOLO IL TESTO (o non hai accesso all'audio). Ignora le categorie puramente sonore della rubrica (o valutale in base alla metrica/ritmo del testo se possibile, o dai un voto neutro/intermedio se impossibile). Concentrati sulla lirica, il messaggio, la poetica.**" : ""}
 
     Il tuo output DEVE essere un singolo oggetto JSON valido conforme allo schema fornito.
 
@@ -95,12 +98,13 @@ export const analyzeSong = async (
     * **39 o meno:** Povero/Non funzionale.
   `;
 
+  // ... (Response Schema remains same) ...
   const responseSchema: Schema = {
     type: Type.OBJECT,
     properties: {
       musicalAnalysis: {
         type: Type.STRING,
-        description: "Una critica severa e oggettiva della musica (melodia, armonia, ritmo, produzione). Usa i dati tecnici come indizi ma descrivi le sensazioni uditive.",
+        description: "Una critica severa e oggettiva della musica (melodia, armonia, ritmo, produzione). SE NON HAI AUDIO: Scrivi 'Analisi musicale non disponibile per mancanza di audio.'",
         nullable: true
       },
       lyricalAnalysis: {
@@ -139,25 +143,30 @@ export const analyzeSong = async (
   const userPrompt = `
     Analizza questo brano musicale.
     
+    ${lyrics ? `TESTO / LYRICS:\n"${lyrics}"\n` : ""}
+    
     BIOGRAFIA ARTISTA / INFO CONTESTUALI:
     "${bio}"
+    
+    ${!audioFile ? "(NOTA: Non è stato fornito alcun file audio. Basa la tua analisi ESCLUSIVAMENTE sul testo fornito.)" : ""}
   `;
 
   try {
+    const requestParts: any[] = [{ text: userPrompt }];
+
+    if (audioBase64 && mimeType) {
+      requestParts.push({
+        inlineData: {
+          mimeType: mimeType,
+          data: audioBase64
+        }
+      });
+    }
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
-        parts: [
-          {
-            text: userPrompt
-          },
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: audioBase64
-            }
-          }
-        ]
+        parts: requestParts
       },
       config: {
         systemInstruction: systemInstructionText,

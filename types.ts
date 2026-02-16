@@ -11,7 +11,8 @@ export interface CriticPersona {
 }
 
 export interface AnalysisRequest {
-  audioFile: File;
+  audioFile?: File; // Optional if text-only
+  lyrics: string;   // Optional or required depending on mode
   bio: string;
   personaId: PersonaId;
 }

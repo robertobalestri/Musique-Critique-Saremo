@@ -23,25 +23,30 @@ function App() {
   // State to toggle between single result view (if multiple exist)
   const [activeResultPersona, setActiveResultPersona] = useState<PersonaId | 'ALL'>('ALL');
 
-  const handleAnalyze = async (audio: File, bio: string, analyzeAll: boolean) => {
+  const handleAnalyze = async (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string) => {
     setIsLoading(true);
     setError(null);
     setResults(null);
     setAudioAnalysisReport(null);
 
     try {
-      // 1. Extract Audio Features first (for context)
-      let audioContextReport = "Analisi tecnica non disponibile.";
-      try {
-        audioContextReport = await extractAudioFeatures(audio);
-      } catch (e) {
-        console.warn("Audio analysis context failed", e);
+      // 1. Extract Audio Features first (for context) - only if audio exists
+      let audioContextReport = "Analisi solo testuale (Audio non fornito).";
+      if (audio) {
+        try {
+          audioContextReport = await extractAudioFeatures(audio);
+        } catch (e) {
+          console.warn("Audio analysis context failed", e);
+          audioContextReport = "Analisi tecnica fallita.";
+        }
       }
+
+      const safeAudio = audio || undefined; // Ensure undefined if null
 
       if (analyzeAll) {
         // Parallel requests
         const promises = Object.values(PERSONAS).map(persona =>
-          analyzeSong(audio, bio, persona.id, audioContextReport)
+          analyzeSong(safeAudio, bio, persona.id, audioContextReport, lyrics)
             .then(res => ({ id: persona.id, data: res }))
             .catch(e => {
               console.error(`Error analyzing with ${persona.name}`, e);
@@ -68,7 +73,7 @@ function App() {
 
       } else {
         // Single request
-        const response = await analyzeSong(audio, bio, selectedPersona, audioContextReport);
+        const response = await analyzeSong(safeAudio, bio, selectedPersona, audioContextReport, lyrics);
         setResults({ [selectedPersona]: response });
         setActiveResultPersona(selectedPersona);
       }
