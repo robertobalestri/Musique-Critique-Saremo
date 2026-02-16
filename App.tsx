@@ -207,7 +207,7 @@ function App() {
             <Headphones className="text-white" size={28} />
           </div>
           <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-            Critico Musicale AI
+            Il Circolo dei Critici Musicali di Saremo
           </h1>
         </div>
         <p className="text-gray-500 max-w-md mx-auto">
