@@ -1,0 +1,5 @@
+{
+  "name": "Critico Musicale AI",
+  "description": "Un'applicazione che analizza brani musicali utilizzando l'intelligenza artificiale multimodale, offrendo recensioni personalizzate basate su diverse personalità di critici musicali.",
+  "requestFramePermissions": []
+}
