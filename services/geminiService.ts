@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { PERSONAS } from '../constants';
+import { RUBRIC_DEFINITIONS } from '../data/rubricDefinitions';
 import { PersonaId, AnalysisResponse, DiscussionMessage } from '../types';
 
 const getModel = () => {
@@ -56,7 +57,11 @@ export const analyzeSong = async (
 
   /* Generiamo dinamicamente la sezione della rubrica basata sul JSON del critico */
   const rubricList = Object.entries(persona.rubric)
-    .map(([category, weight]) => `    * **${category} (${weight} pti):** (Vedi definizione standard)`)
+    .filter(([_, details]) => details.weight > 0)
+    .map(([category, details]) => {
+      const definition = RUBRIC_DEFINITIONS[category] || "Definizione non disponibile";
+      return `    * **${category} (${details.weight} pti):**\n       - Definizione Standard: ${definition}\n       - Lente Critica (${persona.name}): ${details.interpretation}`;
+    })
     .join('\n');
 
   const systemInstructionText = `
@@ -65,23 +70,20 @@ export const analyzeSong = async (
     NOME: ${persona.name}
     DESCRIZIONE: ${persona.description}
     TRATTI: ${persona.traits}
-    
-    ${personaId === 'pop' ? "**IMPORTANTE: EVITA ASSOLUTAMENTE di usare l'intercalare 'Raga' o simili in modo ripetitivo. Sii vario.**" : ""}
 
     La tua funzione è applicare la rubrica di valutazione fornita con obiettività (filtrata attraverso la tua personalità), equità e profonda conoscenza musicale.
 
-    **DATI TECNICI AUDIO (SOLO PER TUO RIFERIMENTO):**
-    ${audioFeatures ? audioFeatures : "Nessun dato tecnico disponibile (Analisi forse solo testuale)."}
     
-    **ISTRUZIONE CRITICA SUI DATI TECNICI:**
-    Usa questi dati per *informare* la tua analisi, ma **NON CITARE MAI I NUMERI ESPLICITAMENTE**.
-    ${!audioFile ? "**ATTENZIONE: Stai analizzando SOLO IL TESTO (o non hai accesso all'audio). Ignora le categorie puramente sonore della rubrica (o valutale in base alla metrica/ritmo del testo se possibile, o dai un voto neutro/intermedio se impossibile). Concentrati sulla lirica, il messaggio, la poetica.**" : ""}
+    ${audioFeatures ? "**DATI TECNICI AUDIO (SOLO PER TUO RIFERIMENTO):**\n **ISTRUZIONE CRITICA SUI DATI TECNICI:**Usa questi dati per *informare* la tua analisi, ma **NON CITARE MAI I NUMERI ESPLICITAMENTE**." + audioFeatures : ""}
+    
+    
+    ${!audioFile ? "**ATTENZIONE: Stai analizzando SOLO IL TESTO. Ignora le categorie puramente sonore della rubrica (o valutale in base alla metrica/ritmo del testo se possibile, o dai un voto neutro/intermedio se impossibile). Concentrati sulla lirica, il messaggio, la poetica.**" : ""}
 
     Il tuo output DEVE essere un singolo oggetto JSON valido conforme allo schema fornito.
 
     **Principi Fondamentali & Direttive:**
     1. **Obiettività Esperta (con Carattere):** Analisi basata su prove, ma col tono della tua "Persona".
-    2. **Punteggio Calibrato:** DEVI usare l'intera scala 0-100.
+    2. **Punteggio Calibrato:** Assegna i punti per ogni categoria con onestà.
     3. **Variazione Lessicale:** EVITA frasi fatte o ripetitive nei campi "interpretation". Sii creativo e specifico per questo brano.
     4. **Sintesi Giornalistica:** Genera un breve riassunto ("voto + motivo") stile trafiletto di rivista.
 
@@ -124,9 +126,7 @@ export const analyzeSong = async (
               required: ["category", "score", "maxScore", "justification"]
             }
           },
-          subtotal: { type: Type.NUMBER, description: "La somma di tutti i punteggi." },
           penalties: { type: Type.NUMBER, description: "Punti dedotti (0 se nessuna)." },
-          finalScore: { type: Type.NUMBER, description: "Il subtotale meno le penalità." },
           journalisticSummary: { type: Type.STRING, description: "Una sintesi folgorante del verdetto in 2 frasi, stile 'Rolling Stone' o trafiletto di giornale. Efficace e diretta." },
           interpretation: { type: Type.STRING, description: "Il testo di interpretazione esteso." },
           areasForImprovement: {
@@ -134,7 +134,7 @@ export const analyzeSong = async (
             description: "Lista puntata di suggerimenti in markdown."
           }
         },
-        required: ["scorecard", "subtotal", "penalties", "finalScore", "journalisticSummary", "interpretation", "areasForImprovement"]
+        required: ["scorecard", "penalties", "journalisticSummary", "interpretation", "areasForImprovement"]
       }
     },
     required: ["lyricalAnalysis"]
@@ -178,7 +178,34 @@ export const analyzeSong = async (
     const responseText = response.text;
     if (!responseText) throw new Error("Nessuna risposta dal modello");
 
-    return JSON.parse(responseText) as AnalysisResponse;
+    const rawResponse = JSON.parse(responseText);
+
+    // Calculate scores programmatically
+    const lyrical = rawResponse.lyricalAnalysis;
+
+    // Sanitize scorecard: Remove 0-weight categories and unknown categories
+    lyrical.scorecard = lyrical.scorecard.filter((item: any) => {
+      const rubricDetails = persona.rubric[item.category];
+      return rubricDetails && rubricDetails.weight > 0;
+    });
+
+    const subtotal = lyrical.scorecard.reduce((acc: number, item: any) => acc + item.score, 0);
+    const penalties = lyrical.penalties || 0;
+    const finalScore = Math.max(0, Math.min(100, subtotal - penalties));
+
+    // Construct the full AnalysisResponse
+    const fullResponse: AnalysisResponse = {
+      ...rawResponse,
+      lyricalAnalysis: {
+        ...lyrical,
+        subtotal,
+        finalScore,
+        scoreLowerBound: 0, // Fallbacks for types if needed
+        scoreUpperBound: 100
+      }
+    };
+
+    return fullResponse;
 
   } catch (error) {
     console.error("Errore durante l'analisi:", error);
@@ -235,5 +262,58 @@ export const generateDiscussionTurn = async (
   } catch (error) {
     console.error("Errore chat:", error);
     return "...";
+  }
+};
+
+/**
+ * Generates an editorial synthesis of all reviews.
+ */
+export const synthesizeReviews = async (
+  results: Record<string, AnalysisResponse>
+): Promise<string> => {
+  const ai = getModel();
+
+  const reviewsText = Object.entries(results).map(([personaId, res]) => {
+    const persona = PERSONAS[personaId as PersonaId];
+    return `
+    CRITICO: ${persona.name}
+    VOTO: ${res.lyricalAnalysis.finalScore}/100
+    SINTESI: "${res.lyricalAnalysis.journalisticSummary}"
+    `;
+  }).join("\n\n");
+
+  const systemPrompt = `
+    Sei il Caporedattore di una prestigiosa rivista musicale.
+    
+    Il tuo compito è leggere le recensioni del tuo staff (che hanno personalità molto diverse) e scrivere un "Verdetto Editoriale" conclusivo.
+    
+    Tono: Autorevole, giornalistico, ficcante e creativo. Non devi essere neutrale, devi tirare le somme.
+    
+    Se i critici sono divisi, evidenzia il conflitto (es. "Il brano spacca la critica: capolavoro per alcuni, spazzatura per altri").
+    Se sono d'accordo, sancisci il trionfo o il disastro.
+    
+    Lunghezza: Massimo 4-5 frasi.
+    
+    OUTPUT RICHIESTO:
+    Scrivi DIRETTAMENTE il testo del verdetto (senza prefissi come "Ecco il verdetto:" o "VERDETTO EDITORIALE:").
+    Restituisci testo puro, senza formattazione markdown o simili.
+    
+    ECCO LE RECENSIONI DELLO STAFF:
+    ${reviewsText}
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: "Scrivi il verdetto.",
+      config: {
+        systemInstruction: systemPrompt,
+      }
+    });
+
+    return response.text || "Verdetto non disponibile.";
+  } catch (error) {
+    console.error("Errore sintesi:", error);
+    return "Impossibile generare la sintesi editoriale.";
   }
 };

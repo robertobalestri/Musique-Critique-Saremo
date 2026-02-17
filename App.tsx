@@ -5,7 +5,8 @@ import PersonaSelector from './components/PersonaSelector';
 import AnalysisForm from './components/AnalysisForm';
 import CritiqueView from './components/CritiqueView';
 import DiscussionView from './components/DiscussionView';
-import { analyzeSong } from './services/geminiService';
+
+import { analyzeSong, synthesizeReviews } from './services/geminiService';
 import { extractAudioFeatures } from './services/audioAnalysisService';
 import { exportToCSV } from './services/exportService';
 import AudioFeatureView from './components/AudioFeatureView';
@@ -19,6 +20,11 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   const [audioAnalysisReport, setAudioAnalysisReport] = useState<string | null>(null);
+
+  // New State for Synthesis
+  const [synthesis, setSynthesis] = useState<string | null>(null);
+  const [averageScore, setAverageScore] = useState<number | null>(null);
+
 
   // State to toggle between single result view (if multiple exist)
   const [activeResultPersona, setActiveResultPersona] = useState<PersonaId | 'ALL'>('ALL');
@@ -68,8 +74,16 @@ function App() {
 
         if (successCount === 0) throw new Error("Tutte le analisi sono fallite.");
 
+        // Calculate Average Score
+        const scores = Object.values(newResults).map(r => r.lyricalAnalysis.finalScore);
+        const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+        setAverageScore(Math.round(avg * 10) / 10); // Round to 1 decimal
+
         setResults(newResults);
         setActiveResultPersona('ALL');
+
+        // Trigger Editor Synthesis
+        synthesizeReviews(newResults).then(text => setSynthesis(text));
 
       } else {
         // Single request
@@ -103,9 +117,13 @@ function App() {
   };
 
   const resetAnalysis = () => {
+
     setResults(null);
     setAudioAnalysisReport(null);
+    setSynthesis(null);
+    setAverageScore(null);
     setError(null);
+
     setActiveResultPersona('ALL');
   };
 
@@ -149,7 +167,35 @@ function App() {
     // View 'Dashboard' for multiple results
     return (
       <div className="animate-in slide-in-from-bottom-10 fade-in duration-500 space-y-12">
-        <h2 className="text-3xl font-bold text-center mb-8">Il Giudizio Universale</h2>
+
+        {/* Editorial Header */}
+        <div className="text-center space-y-4 mb-12">
+          <h2 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-200 to-yellow-500">
+            Il Giudizio Universale
+          </h2>
+
+          {averageScore !== null && (
+            <div className="inline-flex items-center gap-3 bg-gray-800/50 border border-gray-700 px-6 py-3 rounded-full backdrop-blur-sm">
+              <span className="text-gray-400 uppercase text-xs font-bold tracking-widest">Media Critica</span>
+              <div className="text-3xl font-black text-white">{averageScore}</div>
+              <span className="text-gray-500 text-sm">/100</span>
+            </div>
+          )}
+
+          {synthesis && (
+            <div className="max-w-3xl mx-auto mt-6 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-700 p-8 rounded-2xl shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent opacity-50"></div>
+              <h3 className="text-amber-500 text-xs font-bold uppercase tracking-widest mb-4 flex justify-center items-center gap-2">
+                <span className="w-8 h-[1px] bg-amber-500/50"></span>
+                Verdetto Editoriale
+                <span className="w-8 h-[1px] bg-amber-500/50"></span>
+              </h3>
+              <p className="text-xl font-serif italic text-gray-200 leading-relaxed">
+                "{synthesis}"
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Grid of Mini Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">

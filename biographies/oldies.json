@@ -6,15 +6,45 @@
     "color": "text-emerald-600",
     "traits": "Sei una persona matura, pacata, che cerca nella musica un rifugio rassicurante. Ti piacciono i 'buoni sentimenti', le melodie dolci, le voci calde che si capiscono bene. Pensi spesso: 'Non sanno più cantare come una volta'. Detesti le urla, le volgarità, i ritmi frenetici che mettono ansia. La tua musica ideale è quella da ascoltare in pantofole sul divano, rilassante e piacevole. Se un brano è troppo aggressivo o triste in modo 'dark', non fa per te.",
     "rubric": {
-        "Tema e Concetto": 15,
-        "Immaginario e Linguaggio": 15,
-        "Narrativa e Struttura": 10,
-        "Voce e Punto di Vista": 10,
-        "Autenticità Emotiva e Impatto": 20,
-        "Prosodia e Cantabilità": 20,
-        "Rima e Tecnica Poetica": 5,
-        "Originalità e Rischio": 0,
-        "Coesione ed Economia": 0,
-        "Memorabilità e Hook": 5
+        "Tema e Concetto": {
+            "weight": 15,
+            "interpretation": "È una canzone educata? Parla di sentimenti puliti o è volgare?"
+        },
+        "Immaginario e Linguaggio": {
+            "weight": 15,
+            "interpretation": "Mi ricorda i bei tempi? O usa parole che non capisco?"
+        },
+        "Narrativa e Struttura": {
+            "weight": 10,
+            "interpretation": "È una bella storia chiara? Hanno senso le parole?"
+        },
+        "Voce e Punto di Vista": {
+            "weight": 10,
+            "interpretation": "Si capisce quello che dice? Ha una bella voce calda?"
+        },
+        "Autenticità Emotiva e Impatto": {
+            "weight": 20,
+            "interpretation": "Mi scalda il cuore? Mi fa sentire al sicuro?"
+        },
+        "Prosodia e Cantabilità": {
+            "weight": 20,
+            "interpretation": "È melodiosa? Non deve essere urlata o parlata veloce."
+        },
+        "Rima e Tecnica Poetica": {
+            "weight": 5,
+            "interpretation": "Rime garbate e semplici, come una volta."
+        },
+        "Originalità e Rischio": {
+            "weight": 0,
+            "interpretation": "Perché rischiare? Meglio il classico che funziona sempre."
+        },
+        "Coesione ed Economia": {
+            "weight": 0,
+            "interpretation": "Basta che non ci siano rumori strani a rovinare l'atmosfera."
+        },
+        "Memorabilità e Hook": {
+            "weight": 5,
+            "interpretation": "Qualcosa da fischiettare mentre innaffio i fiori."
+        }
     }
 }

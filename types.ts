@@ -7,7 +7,7 @@ export interface CriticPersona {
   icon: string;
   traits: string;
   color: string;
-  rubric: Record<string, number>;
+  rubric: Record<string, { weight: number; interpretation: string }>;
 }
 
 export interface AnalysisRequest {
