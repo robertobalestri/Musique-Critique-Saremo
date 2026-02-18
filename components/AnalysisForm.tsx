@@ -71,8 +71,33 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalyze, onAudioAnalysis,
     }
   };
 
+  const [password, setPassword] = useState('');
+  const REQUIRED_PASSWORD = process.env.PASSWORD;
+  const isPasswordCorrect = !REQUIRED_PASSWORD || password === REQUIRED_PASSWORD;
+
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
+
+      {/* Password Protection (Only if configured) */}
+      {REQUIRED_PASSWORD && (
+        <div className="bg-red-900/20 border border-red-900/50 rounded-xl p-4 flex items-center gap-4">
+          <div className="p-2 bg-red-900/30 rounded-lg">
+            <div className="text-red-400 font-bold text-xl">🔒</div>
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-bold text-red-300 uppercase tracking-widest mb-1">
+              Password Accesso
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Inserisci password per abilitare l'analisi..."
+              className="w-full bg-dark-bg border border-red-900/50 rounded-lg p-2 text-white focus:outline-none focus:border-red-500 transition-all font-mono"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Mode Toggle */}
       <div className="flex justify-end">
@@ -212,10 +237,10 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalyze, onAudioAnalysis,
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <button
           onClick={(e) => handleSubmit(e, false)}
-          disabled={isLoading || (isTextOnly ? !lyrics.trim() : !audioFile)}
+          disabled={isLoading || (isTextOnly ? !lyrics.trim() : !audioFile) || !isPasswordCorrect}
           className={`
             py-4 rounded-xl font-bold text-sm lg:text-base shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95
-            ${isLoading || (isTextOnly ? !lyrics.trim() : !audioFile)
+            ${isLoading || (isTextOnly ? !lyrics.trim() : !audioFile) || !isPasswordCorrect
               ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
               : 'bg-white text-black hover:bg-gray-200'}
           `}
@@ -225,10 +250,10 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalyze, onAudioAnalysis,
 
         <button
           onClick={(e) => handleSubmit(e, true)}
-          disabled={isLoading || (isTextOnly ? !lyrics.trim() : !audioFile)}
+          disabled={isLoading || (isTextOnly ? !lyrics.trim() : !audioFile) || !isPasswordCorrect}
           className={`
             py-4 rounded-xl font-bold text-sm lg:text-base shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95
-            ${isLoading || (isTextOnly ? !lyrics.trim() : !audioFile)
+            ${isLoading || (isTextOnly ? !lyrics.trim() : !audioFile) || !isPasswordCorrect
               ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
               : 'bg-gradient-to-r from-accent-primary to-accent-secondary text-white hover:opacity-90 hover:shadow-accent-primary/25'}
           `}
@@ -253,10 +278,10 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalyze, onAudioAnalysis,
         <button
           type="button"
           onClick={() => audioFile && onAudioAnalysis(audioFile)}
-          disabled={!audioFile || isLoading || isTextOnly}
+          disabled={!audioFile || isLoading || isTextOnly || !isPasswordCorrect}
           className={`
             py-4 rounded-xl font-bold text-sm lg:text-base shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 border-2
-            ${!audioFile || isLoading || isTextOnly
+            ${!audioFile || isLoading || isTextOnly || !isPasswordCorrect
               ? 'border-gray-800 text-gray-600 cursor-not-allowed opacity-50'
               : 'border-blue-500 text-blue-400 hover:bg-blue-500/10'}
           `}
