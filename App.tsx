@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { PersonaId, AnalysisResponse } from './types';
 import { PERSONAS } from './constants';
-import PersonaSelector from './components/PersonaSelector';
 import AnalysisForm from './components/AnalysisForm';
 import CritiqueView from './components/CritiqueView';
 import DiscussionView from './components/DiscussionView';
+import Sidebar from './components/Sidebar';
+import CriticProfile from './components/CriticProfile';
 
 import { analyzeSong, synthesizeReviews } from './services/geminiService';
 import { extractAudioFeatures } from './services/audioAnalysisService';
 import { exportToHTML } from './services/htmlExportService';
 import { exportToCSV } from './services/exportService';
 import AudioFeatureView from './components/AudioFeatureView';
-import { Headphones, Grid, User, Music, Share2, Download, RotateCcw } from 'lucide-react';
+import { Headphones, Download, RotateCcw, Menu, X, User } from 'lucide-react';
 
 function App() {
   const [selectedPersona, setSelectedPersona] = useState<PersonaId>('traditionalist');
@@ -21,17 +22,17 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   const [audioAnalysisReport, setAudioAnalysisReport] = useState<string | null>(null);
-
-  // New State for Synthesis
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [averageScore, setAverageScore] = useState<number | null>(null);
-
-  // Metadata State
   const [metadata, setMetadata] = useState({ artistName: '', songTitle: '', isBand: false });
-
 
   // State to toggle between single result view (if multiple exist)
   const [activeResultPersona, setActiveResultPersona] = useState<PersonaId | 'ALL'>('ALL');
+
+  // NEW Navigation State
+  const [viewingCritic, setViewingCritic] = useState<PersonaId | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile toggle
+  const [viewMode, setViewMode] = useState<'HOME' | 'SINGLE'>('HOME');
 
   const handleAnalyze = async (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string, artistName: string, songTitle: string, isBand: boolean) => {
     setIsLoading(true);
@@ -91,7 +92,7 @@ function App() {
         synthesizeReviews(newResults).then(text => setSynthesis(text));
 
       } else {
-        // Single request
+        // Single request - uses selectedPersona which is set via Sidebar -> Profile -> Test
         const response = await analyzeSong(safeAudio, bio, selectedPersona, audioContextReport, lyrics, artistName, songTitle, isBand);
         setResults({ [selectedPersona]: response });
         setActiveResultPersona(selectedPersona);
@@ -122,23 +123,19 @@ function App() {
   };
 
   const resetAnalysis = () => {
-
     setResults(null);
     setAudioAnalysisReport(null);
     setSynthesis(null);
     setAverageScore(null);
     setError(null);
-
     setActiveResultPersona('ALL');
   };
 
   const getSafeFilename = (ext: string) => {
     const artist = metadata.artistName.trim() || 'Artista_Sconosciuto';
     const title = metadata.songTitle.trim() || 'Brano_Sconosciuto';
-
     const safeArtist = artist.replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
     const safeTitle = title.replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
-
     return `${safeArtist}_${safeTitle}.${ext}`.toLowerCase();
   };
 
@@ -168,6 +165,20 @@ function App() {
               className="flex items-center gap-2 text-gray-400 hover:text-white mb-4 transition-colors"
             >
               ← Torna alla Panoramica
+            </button>
+          )}
+
+          {/* Back to Home for Single View Mode */}
+          {viewMode === 'SINGLE' && !isMultiMode && (
+            <button
+              onClick={() => {
+                resetAnalysis();
+                setViewMode('HOME');
+                setSelectedPersona('ALL');
+              }}
+              className="flex items-center gap-2 text-indigo-400 hover:text-indigo-300 mb-4 transition-colors font-medium"
+            >
+              ← Torna alla Homepage del Circolo
             </button>
           )}
           <CritiqueView
@@ -266,66 +277,151 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-dark-bg text-gray-100 font-sans selection:bg-accent-primary selection:text-white pb-20">
+    <div className="min-h-screen bg-dark-bg text-gray-100 font-sans selection:bg-accent-primary selection:text-white flex overflow-hidden">
 
-      {/* Background decoration */}
-      <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-900/10 rounded-full blur-[120px]"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/10 rounded-full blur-[120px]"></div>
+      {/* Sidebar (Desktop) */}
+      <div className="hidden md:block h-screen sticky top-0">
+        <Sidebar
+          onSelectCritic={setViewingCritic}
+          selectedCriticId={viewingCritic}
+        />
       </div>
 
-      <header className="pt-12 pb-8 text-center px-4">
-        <div className="flex items-center justify-center gap-3 mb-2">
-          <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg shadow-lg shadow-indigo-500/20">
-            <Headphones className="text-white" size={28} />
+      {/* Sidebar (Mobile Overlay) */}
+      {isSidebarOpen && (
+        <div className="md:hidden fixed inset-0 z-40 flex">
+          <div className="w-64">
+            <Sidebar onSelectCritic={(id) => {
+              setViewingCritic(id);
+              setIsSidebarOpen(false);
+            }} />
           </div>
-          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-            Il Circolo dei Critici Musicali di Saremo
-          </h1>
+          <div className="flex-1 bg-black/50 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)}></div>
         </div>
-        <p className="text-gray-500 max-w-md mx-auto">
-          Carica il tuo brano e fatti giudicare spietatamente (o amabilmente) dai nostri critici artificiali.
-        </p>
-      </header>
+      )}
 
-      <main className="container mx-auto px-4">
-        {error && (
-          <div className="max-w-2xl mx-auto mb-8 bg-red-900/20 border border-red-900/50 text-red-200 p-4 rounded-lg text-center">
-            {error}
-          </div>
-        )}
+      {/* Main Content */}
+      <div className="flex-1 h-screen overflow-y-auto relative w-full">
 
-        {!results && !audioAnalysisReport ? (
-          <>
-            <section className="mb-12">
-              <h2 className="text-center text-sm font-semibold uppercase tracking-widest text-gray-500 mb-6 flex items-center justify-center gap-2">
-                <User size={16} /> 1. Scegli il tuo Critico (per analisi singola)
-              </h2>
-              <PersonaSelector
-                selectedPersona={selectedPersona}
-                onSelect={setSelectedPersona}
-              />
-            </section>
+        {/* Mobile Header Toggle */}
+        <div className="md:hidden p-4 flex items-center justify-between border-b border-gray-800 bg-dark-bg/95 backdrop-blur sticky top-0 z-30">
+          <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Saremo AI</span>
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-400">
+            {isSidebarOpen ? <X /> : <Menu />}
+          </button>
+        </div>
 
-            <section className="animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
-              <h2 className="text-center text-sm font-semibold uppercase tracking-widest text-gray-500 mb-6 flex items-center justify-center gap-2">
-                <Music size={16} /> 2. Carica Musica & Info
-              </h2>
-              <AnalysisForm
-                onAnalyze={handleAnalyze}
-                onAudioAnalysis={handleAudioAnalysis}
-                isLoading={isLoading}
-              />
-            </section>
-          </>
-        ) : (
-          renderResults()
-        )}
-      </main>
+        {/* Background decoration */}
+        <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-900/10 rounded-full blur-[120px]"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/10 rounded-full blur-[120px]"></div>
+        </div>
 
-      <footer className="text-center text-gray-600 text-sm mt-20">
-        <p>Powered by Gemini Multimodal API</p>
-      </footer>
+        <div className="max-w-6xl mx-auto p-4 md:p-8 pb-20">
+          <header className="pt-8 pb-8 text-center px-4">
+            <div className="flex items-center justify-center gap-3 mb-2">
+              <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg shadow-lg shadow-indigo-500/20">
+                <Headphones className="text-white" size={28} />
+              </div>
+              <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+                Il Circolo dei Critici Musicali di Saremo
+              </h1>
+            </div>
+            <p className="text-gray-500 max-w-md mx-auto">
+              Carica il tuo brano e fatti giudicare spietatamente (o amabilmente) dai nostri critici artificiali.
+            </p>
+          </header>
+
+          <main className="container mx-auto">
+            {error && (
+              <div className="max-w-2xl mx-auto mb-8 bg-red-900/20 border border-red-900/50 text-red-200 p-4 rounded-lg text-center">
+                {error}
+              </div>
+            )}
+
+            {!results && !audioAnalysisReport ? (
+              <section className="animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
+
+                {/* VIEW MODE HANDLING */}
+                {viewMode === 'SINGLE' && selectedPersona !== 'ALL' ? (
+                  // SINGLE CRITIC MODE (Activated after selecting 'Testa' from profile or clicking a critic in sidebar)
+                  <div className="space-y-6">
+                    <button
+                      onClick={() => {
+                        setViewMode('HOME');
+                        setSelectedPersona('ALL'); // Reset selected persona when going back to home
+                      }}
+                      className="flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-medium transition-colors mb-4"
+                    >
+                      ← Torna alla Homepage del Circolo
+                    </button>
+
+                    <div className="bg-dark-surface border border-gray-800 rounded-xl p-6 mb-8 flex items-center gap-4">
+                      <div className={`p-4 rounded-full bg-gray-900 ${PERSONAS[selectedPersona].color}`}>
+                        <User size={24} />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-bold text-white">Analisi Singola: {PERSONAS[selectedPersona].name}</h2>
+                        <p className="text-gray-400 text-sm">Questo critico analizzerà il tuo brano secondo i suoi canoni specifici.</p>
+                      </div>
+                    </div>
+
+                    <AnalysisForm
+                      onAnalyze={handleAnalyze}
+                      onAudioAnalysis={handleAudioAnalysis}
+                      isLoading={isLoading}
+                      allowSingle={true}
+                      allowAll={false}
+                      singleCriticName={PERSONAS[selectedPersona].name}
+                    />
+                  </div>
+                ) : (
+                  // HOME MODE (Default)
+                  <>
+                    <div className="text-center mb-12">
+                      <h2 className="text-2xl font-bold text-white mb-4">Il Giudizio Universale</h2>
+                      <p className="text-gray-400 max-w-2xl mx-auto">
+                        Ottieni un'analisi completa e simultanea da tutti i critici del circolo, con un verdetto editoriale finale.
+                      </p>
+                    </div>
+
+                    <AnalysisForm
+                      onAnalyze={handleAnalyze}
+                      onAudioAnalysis={handleAudioAnalysis}
+                      isLoading={isLoading}
+                      allowSingle={false}
+                      allowAll={true}
+                    />
+                  </>
+                )}
+
+              </section>
+            ) : (
+              renderResults()
+            )}
+          </main>
+
+          <footer className="text-center text-gray-600 text-sm mt-20">
+            <p>Powered by Gemini Multimodal API</p>
+          </footer>
+        </div>
+      </div>
+
+      {/* Critic Profile Modal */}
+      {viewingCritic && (
+        <CriticProfile
+          persona={PERSONAS[viewingCritic]}
+          onClose={() => setViewingCritic(null)}
+          onTest={() => {
+            setSelectedPersona(viewingCritic);
+            setViewMode('SINGLE');
+            setViewingCritic(null);
+            // Optional: reset results if any to show the form again
+            if (results) resetAnalysis();
+          }}
+        />
+      )}
+
     </div>
   );
 }
