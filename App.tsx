@@ -8,6 +8,7 @@ import DiscussionView from './components/DiscussionView';
 
 import { analyzeSong, synthesizeReviews } from './services/geminiService';
 import { extractAudioFeatures } from './services/audioAnalysisService';
+import { exportToHTML } from './services/htmlExportService';
 import { exportToCSV } from './services/exportService';
 import AudioFeatureView from './components/AudioFeatureView';
 import { Headphones, Grid, User, Music, Share2, Download, RotateCcw } from 'lucide-react';
@@ -25,15 +26,19 @@ function App() {
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [averageScore, setAverageScore] = useState<number | null>(null);
 
+  // Metadata State
+  const [metadata, setMetadata] = useState({ artistName: '', songTitle: '', isBand: false });
+
 
   // State to toggle between single result view (if multiple exist)
   const [activeResultPersona, setActiveResultPersona] = useState<PersonaId | 'ALL'>('ALL');
 
-  const handleAnalyze = async (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string) => {
+  const handleAnalyze = async (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string, artistName: string, songTitle: string, isBand: boolean) => {
     setIsLoading(true);
     setError(null);
     setResults(null);
     setAudioAnalysisReport(null);
+    setMetadata({ artistName, songTitle, isBand });
 
     try {
       // 1. Extract Audio Features first (for context) - only if audio exists
@@ -52,7 +57,7 @@ function App() {
       if (analyzeAll) {
         // Parallel requests
         const promises = Object.values(PERSONAS).map(persona =>
-          analyzeSong(safeAudio, bio, persona.id, audioContextReport, lyrics)
+          analyzeSong(safeAudio, bio, persona.id, audioContextReport, lyrics, artistName, songTitle, isBand)
             .then(res => ({ id: persona.id, data: res }))
             .catch(e => {
               console.error(`Error analyzing with ${persona.name}`, e);
@@ -87,7 +92,7 @@ function App() {
 
       } else {
         // Single request
-        const response = await analyzeSong(safeAudio, bio, selectedPersona, audioContextReport, lyrics);
+        const response = await analyzeSong(safeAudio, bio, selectedPersona, audioContextReport, lyrics, artistName, songTitle, isBand);
         setResults({ [selectedPersona]: response });
         setActiveResultPersona(selectedPersona);
       }
@@ -125,6 +130,16 @@ function App() {
     setError(null);
 
     setActiveResultPersona('ALL');
+  };
+
+  const getSafeFilename = (ext: string) => {
+    const artist = metadata.artistName.trim() || 'Artista_Sconosciuto';
+    const title = metadata.songTitle.trim() || 'Brano_Sconosciuto';
+
+    const safeArtist = artist.replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
+    const safeTitle = title.replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
+
+    return `${safeArtist}_${safeTitle}.${ext}`.toLowerCase();
   };
 
   // Helper to determine what to render
@@ -214,7 +229,7 @@ function App() {
                   {result.lyricalAnalysis.finalScore}
                   <span className="text-sm text-gray-500 font-normal">/100</span>
                 </div>
-                <p className="text-xs text-gray-400 line-clamp-3 italic">"{result.lyricalAnalysis.interpretation}"</p>
+                <p className="text-xs text-gray-400 italic">"{result.lyricalAnalysis.journalisticSummary}"</p>
                 <div className="mt-4 text-xs font-mono text-gray-600 group-hover:text-gray-300">Clicca per dettagli</div>
               </div>
             );
@@ -233,10 +248,17 @@ function App() {
           </button>
 
           <button
-            onClick={() => results && exportToCSV(results, `analisi_musicale_${Date.now()}.csv`)}
+            onClick={() => results && exportToCSV(results, synthesis, averageScore, metadata, getSafeFilename('csv'))}
             className="px-6 py-3 bg-gray-800 text-white rounded-full hover:bg-gray-700 transition-colors flex items-center gap-2"
           >
             <Download size={18} /> Esporta CSV
+          </button>
+
+          <button
+            onClick={() => results && exportToHTML(results, synthesis, averageScore, metadata, getSafeFilename('html'))}
+            className="px-6 py-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 transition-colors flex items-center gap-2 shadow-lg shadow-indigo-500/20"
+          >
+            <Download size={18} /> Esporta HTML
           </button>
         </div>
       </div>

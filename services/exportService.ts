@@ -1,86 +1,120 @@
 import { AnalysisResponse, PersonaId } from '../types';
 import { PERSONAS } from '../constants';
 
-export const exportToCSV = (results: Record<string, AnalysisResponse>, filename: string = 'analisi_musicale.csv') => {
+export const exportToCSV = (
+    results: Record<string, AnalysisResponse>,
+    synthesis: string | null,
+    averageScore: number | null,
+    metadata: { artistName: string; songTitle: string; isBand: boolean },
+    filename: string = 'analisi_musicale.csv'
+) => {
     if (!results) return;
 
-    // 1. Definiamo le colonne (Header)
+    // List of standard categories to ensure column order
+    const standardCategories = [
+        'Tema e Concetto',
+        'Immaginario e Linguaggio',
+        'Narrativa e Struttura',
+        'Voce e Punto di Vista',
+        'Autenticità Emotiva e Impatto',
+        'Prosodia e Cantabilità',
+        'Rima e Tecnica Poetica',
+        'Originalità e Rischio',
+        'Coesione ed Economia',
+        'Memorabilità e Hook'
+    ];
+
+    // Helper to map incoming category names to standard ones if needed
+    // (Currently assuming exact matches or partial matches)
+    const normalizeCategory = (cat: string) => {
+        return standardCategories.find(sc => cat.includes(sc)) || cat;
+    };
+
+
+    // 1. Define Columns (Headers)
     const headers = [
+        'ID',
+        'Artista',
+        'Brano',
+        'Media Critica',
+        'Verdetto Editoriale (Caporedattore)',
         'Critico',
         'Voto Finale / 100',
         'Sintesi Giornalistica',
         'Interpretazione Estesa',
+        'Analisi Musicale',
+        'Aree di Miglioramento',
         'Penalità',
-        // Colonne Dinamiche per la Rubrica (useremo l'unione di tutte le categorie possibili)
-        'Rubrica: Tema e Concetto',
-        'Rubrica: Immaginario e Linguaggio',
-        'Rubrica: Narrativa e Struttura',
-        'Rubrica: Voce e Punto di Vista',
-        'Rubrica: Autenticità Emotiva',
-        'Rubrica: Prosodia e Cantabilità',
-        'Rubrica: Rima e Tecnica',
-        'Rubrica: Originalità e Rischio',
-        'Rubrica: Coesione ed Economia',
-        'Rubrica: Memorabilità e Hook'
+        // Dynamic Rubric Columns: Vote and Comment for each category
+        ...standardCategories.flatMap(cat => [`Rubrica: ${cat} - Voto`, `Rubrica: ${cat} - Commento`])
     ];
 
-    /* Mapping helper per normalizzare i nomi delle categorie se necessario */
-    const categoryMap: Record<string, string> = {
-        'Tema e Concetto': 'Rubrica: Tema e Concetto',
-        'Immaginario e Linguaggio': 'Rubrica: Immaginario e Linguaggio',
-        'Narrativa e Struttura': 'Rubrica: Narrativa e Struttura',
-        'Voce e Punto di Vista': 'Rubrica: Voce e Punto di Vista',
-        'Autenticità Emotiva e Impatto': 'Rubrica: Autenticità Emotiva',
-        'Prosodia e Cantabilità': 'Rubrica: Prosodia e Cantabilità',
-        'Rima e Tecnica Poetica': 'Rubrica: Rima e Tecnica',
-        'Originalità e Rischio': 'Rubrica: Originalità e Rischio',
-        'Coesione ed Economia': 'Rubrica: Coesione ed Economia',
-        'Memorabilità e Hook': 'Rubrica: Memorabilità e Hook'
-    };
-
-
-    // 2. Costruiamo le righe di dati
-    const rows = Object.entries(results).map(([personaId, analysis]) => {
+    // 2. Build Data Rows
+    const rows = Object.entries(results).map(([personaId, analysis], index) => {
         const persona = PERSONAS[personaId as PersonaId];
         const lyrical = analysis.lyricalAnalysis;
 
-        // Prepariamo un oggetto per le categorie della rubrica
-        const rubricScores: Record<string, string> = {};
+        // Map scorecard items for easy access
+        const scorecardMap: Record<string, { score: string; comment: string }> = {};
+
         lyrical.scorecard.forEach(item => {
-            // Cerchiamo una corrispondenza parziale o esatta
-            const mappedHeader = Object.keys(categoryMap).find(key => item.category.includes(key));
-            if (mappedHeader) {
-                rubricScores[categoryMap[mappedHeader]] = `${item.score}/${item.maxScore}`;
-            } else {
-                // Fallback per categorie non mappate standard
-                rubricScores[item.category] = `${item.score}/${item.maxScore}`;
-            }
+            const normalizedCat = normalizeCategory(item.category);
+            scorecardMap[normalizedCat] = {
+                score: `${item.score}/${item.maxScore}`,
+                comment: (item.justification || '').replace(/"/g, '""')
+            };
         });
 
-        // Costruiamo la riga ordinata secondo gli headers
+        // Helper to safely quote strings for CSV
+        const q = (str: string | null | undefined | number) => {
+            if (str === null || str === undefined) return '""';
+            return `"${String(str).replace(/"/g, '""')}"`;
+        };
+
         return headers.map(header => {
-            if (header === 'Critico') return `"${persona.name}"`;
+            // -- Metadata --
+            if (header === 'ID') return index + 1;
+            if (header === 'Artista') return q(metadata.artistName);
+            if (header === 'Brano') return q(metadata.songTitle);
+            if (header === 'Media Critica') return averageScore !== null ? averageScore : '""';
+            if (header === 'Verdetto Editoriale (Caporedattore)') return q(synthesis);
+
+            // -- Critic Data --
+            if (header === 'Critico') return q(persona.name);
             if (header === 'Voto Finale / 100') return lyrical.finalScore;
-            if (header === 'Sintesi Giornalistica') return `"${(lyrical.journalisticSummary || '').replace(/"/g, '""')}"`;
-            if (header === 'Interpretazione Estesa') return `"${(lyrical.interpretation || '').replace(/"/g, '""')}"`;
+            if (header === 'Sintesi Giornalistica') return q(lyrical.journalisticSummary);
+            if (header === 'Interpretazione Estesa') return q(lyrical.interpretation);
+            if (header === 'Analisi Musicale') return q(analysis.musicalAnalysis);
+            if (header === 'Aree di Miglioramento') return q(lyrical.areasForImprovement);
             if (header === 'Penalità') return lyrical.penalties;
 
-            // Se è una colonna della rubrica
+            // -- Rubric Data --
             if (header.startsWith('Rubrica:')) {
-                return rubricScores[header] ? `"${rubricScores[header]}"` : '""';
+                // Extract category name from header "Rubrica: [Category] - [Type]"
+                const match = header.match(/Rubrica: (.+) - (Voto|Commento)/);
+                if (match) {
+                    const category = match[1];
+                    const type = match[2];
+                    const data = scorecardMap[category];
+
+                    if (!data) return '""'; // Category not found for this critic
+
+                    if (type === 'Voto') return `"${data.score}"`;
+                    if (type === 'Commento') return `"${data.comment}"`;
+                }
             }
 
             return '""';
         }).join(',');
     });
 
-    // 3. Uniamo tutto in una stringa CSV
+    // 3. Join CSV Content
     const csvContent = [
         headers.join(','),
         ...rows
     ].join('\n');
 
-    // 4. Creiamo il Blob e scateniamo il download
+    // 4. Create Blob and Download
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
 

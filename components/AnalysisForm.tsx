@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Upload, FileText, Music, Users, X, Activity, AlignLeft, CheckCircle2 } from 'lucide-react';
 
 interface AnalysisFormProps {
-  onAnalyze: (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string) => void;
+  onAnalyze: (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string, artistName: string, songTitle: string, isBand: boolean) => void;
   onAudioAnalysis: (audio: File) => void;
   isLoading: boolean;
 }
@@ -12,6 +12,9 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalyze, onAudioAnalysis,
   const [lyrics, setLyrics] = useState('');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [isTextOnly, setIsTextOnly] = useState(false);
+  const [artistName, setArtistName] = useState('');
+  const [songTitle, setSongTitle] = useState('');
+  const [isBand, setIsBand] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const validateAndSetFile = (file: File) => {
@@ -54,13 +57,17 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalyze, onAudioAnalysis,
         alert("Inserisci il testo per l'analisi testuale.");
         return;
       }
-      onAnalyze(undefined, bio, analyzeAll, lyrics);
+      onAnalyze(undefined, bio, analyzeAll, lyrics, artistName, songTitle, isBand);
     } else {
       if (!audioFile) {
         alert("Carica un file audio.");
         return;
       }
-      onAnalyze(audioFile, bio, analyzeAll, lyrics);
+      if (!audioFile) {
+        alert("Carica un file audio.");
+        return;
+      }
+      onAnalyze(audioFile, bio, analyzeAll, lyrics, artistName, songTitle, isBand);
     }
   };
 
@@ -135,6 +142,40 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalyze, onAudioAnalysis,
             </p>
           </div>
         )}
+      </div>
+
+      {/* NEW Metadata Inputs */}
+      <div className="bg-dark-surface rounded-xl p-6 border border-gray-800 space-y-4">
+        <h3 className="font-semibold text-gray-200 flex items-center gap-2">
+          <Music size={18} /> Dettagli Brano
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <input
+            type="text"
+            value={artistName}
+            onChange={(e) => setArtistName(e.target.value)}
+            placeholder="Nome Artista / Band"
+            className="w-full bg-dark-bg border border-gray-700 rounded-lg p-3 text-gray-300 focus:outline-none focus:border-indigo-500 transition-all placeholder-gray-600"
+          />
+          <input
+            type="text"
+            value={songTitle}
+            onChange={(e) => setSongTitle(e.target.value)}
+            placeholder="Titolo Canzone"
+            className="w-full bg-dark-bg border border-gray-700 rounded-lg p-3 text-gray-300 focus:outline-none focus:border-indigo-500 transition-all placeholder-gray-600"
+          />
+        </div>
+        <div className="flex items-center gap-3 mt-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isBand}
+              onChange={(e) => setIsBand(e.target.checked)}
+              className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500 focus:ring-2"
+            />
+            <span className="text-sm text-gray-400">È una Band / Gruppo?</span>
+          </label>
+        </div>
       </div>
 
       {/* Lyrics Input */}

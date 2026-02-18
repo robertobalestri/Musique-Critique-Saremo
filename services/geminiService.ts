@@ -42,7 +42,10 @@ export const analyzeSong = async (
   bio: string,
   personaId: PersonaId,
   audioFeatures?: string, // New parameter (optional)
-  lyrics?: string // New parameter (optional)
+  lyrics?: string, // New parameter (optional)
+  artistName?: string,
+  songTitle?: string,
+  isBand?: boolean
 ): Promise<AnalysisResponse> => {
   const ai = getModel();
   const persona = PERSONAS[personaId];
@@ -143,6 +146,8 @@ export const analyzeSong = async (
   const userPrompt = `
     Analizza questo brano musicale.
     
+    ${songTitle && artistName ? `BRANO: "${songTitle}" di ${artistName} (${isBand ? 'Band' : 'Solista'})` : ''}
+
     ${lyrics ? `TESTO / LYRICS:\n"${lyrics}"\n` : ""}
     
     BIOGRAFIA ARTISTA / INFO CONTESTUALI:
@@ -288,11 +293,6 @@ export const synthesizeReviews = async (
     Il tuo compito è leggere le recensioni del tuo staff (che hanno personalità molto diverse) e scrivere un "Verdetto Editoriale" conclusivo.
     
     Tono: Autorevole, giornalistico, ficcante e creativo. Non devi essere neutrale, devi tirare le somme.
-    
-    Se i critici sono divisi, evidenzia il conflitto (es. "Il brano spacca la critica: capolavoro per alcuni, spazzatura per altri").
-    Se sono d'accordo, sancisci il trionfo o il disastro.
-    
-    Lunghezza: Massimo 4-5 frasi.
     
     OUTPUT RICHIESTO:
     Scrivi DIRETTAMENTE il testo del verdetto (senza prefissi come "Ecco il verdetto:" o "VERDETTO EDITORIALE:").
