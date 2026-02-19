@@ -1,6 +1,8 @@
 {
     "id": "teen",
-    "name": "Il Teen",
+    "name": "Lil 'Zanza' Flex",
+    "subtitle": "La voce della Gen Z",
+    "type": "music",
     "description": "Gusto giovane, amori, crisi esistenziali e street style. Odia le cose vecchie e complicate.",
     "icon": "Smartphone",
     "color": "text-lime-400",

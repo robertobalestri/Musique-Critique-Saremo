@@ -1,6 +1,8 @@
 {
     "id": "sanremese",
-    "name": "Il Sanremese",
+    "name": "Tony Fiori",
+    "subtitle": "Il nazional-popolare",
+    "type": "music",
     "description": "Vive per il Festival. Cerca l'orchestrazione, la voce potente e l'amore nazional-popolare.",
     "icon": "Mic2",
     "color": "text-indigo-500",

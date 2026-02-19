@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, Music, Users, X, Activity, AlignLeft, CheckCircle2 } from 'lucide-react';
+import { Upload, FileText, Music, Users, X, Activity, AlignLeft, CheckCircle2, Image as ImageIcon, Camera } from 'lucide-react';
 
 interface AnalysisFormProps {
   onAnalyze: (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string, artistName: string, songTitle: string, isBand: boolean) => void;
@@ -25,7 +25,9 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
   const [artistName, setArtistName] = useState('');
   const [songTitle, setSongTitle] = useState('');
   const [isBand, setIsBand] = useState(false);
+  const [images, setImages] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const validateAndSetFile = (file: File) => {
     // 100MB limit
@@ -52,10 +54,26 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
     }
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newImages = Array.from(e.target.files).filter(file => file.type.startsWith('image/'));
+      setImages(prev => [...prev, ...newImages]);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      validateAndSetFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files) {
+      const droppedFiles = Array.from(e.dataTransfer.files);
+      const audio = droppedFiles.find(f => f.type.startsWith('audio/'));
+      const droppedImages = droppedFiles.filter(f => f.type.startsWith('image/'));
+
+      if (audio && !isTextOnly) validateAndSetFile(audio);
+      if (droppedImages.length > 0) setImages(prev => [...prev, ...droppedImages]);
     }
   };
 
@@ -67,17 +85,13 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
         alert("Inserisci il testo per l'analisi testuale.");
         return;
       }
-      onAnalyze(undefined, bio, analyzeAll, lyrics, artistName, songTitle, isBand);
+      onAnalyze(undefined, bio, analyzeAll, lyrics, artistName, songTitle, isBand, images);
     } else {
       if (!audioFile) {
         alert("Carica un file audio.");
         return;
       }
-      if (!audioFile) {
-        alert("Carica un file audio.");
-        return;
-      }
-      onAnalyze(audioFile, bio, analyzeAll, lyrics, artistName, songTitle, isBand);
+      onAnalyze(audioFile, bio, analyzeAll, lyrics, artistName, songTitle, isBand, images);
     }
   };
 
@@ -130,16 +144,23 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
         </label>
       </div>
 
-      {/* Audio Upload Area (Conditional opacity) */}
+      {/* Audio Upload Area */}
       <div
         className={`
-          border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300
-          ${isTextOnly ? 'opacity-40 grayscale pointer-events-none' : 'cursor-pointer'}
-          ${audioFile ? 'border-accent-primary bg-accent-primary/10' : 'border-gray-700 hover:border-gray-500 hover:bg-dark-surface'}
+          border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 relative
+          ${isTextOnly ? 'opacity-50 grayscale border-gray-800' : 'cursor-pointer border-gray-700 hover:border-gray-500 hover:bg-dark-surface'}
+          ${audioFile ? 'border-accent-primary bg-accent-primary/10' : ''}
         `}
-        onDragOver={(e) => !isTextOnly && e.preventDefault()}
-        onDrop={(e) => !isTextOnly && handleDrop(e)}
-        onClick={() => !isTextOnly && fileInputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          // Allow drag even if text only, for IMAGES
+        }}
+        onDrop={handleDrop}
+        onClick={(e) => {
+          // If clicking the container, trigger audio if not present, or ignore?
+          // Actually let's keep audio trigger on main, relying on explicit buttons usually better but keeping simple.
+          if (!isTextOnly && !audioFile) fileInputRef.current?.click();
+        }}
       >
         <input
           type="file"
@@ -165,16 +186,71 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
               }}
               className="mt-4 px-3 py-1 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-full text-xs flex items-center gap-1 transition-colors"
             >
-              <X size={12} /> Rimuovi
+              <X size={12} /> Rimuovi Audio
             </button>
           </div>
         ) : (
           <div className="flex flex-col items-center">
             <Upload className="text-gray-500 mb-4" size={40} />
-            <p className="text-lg font-medium text-gray-300">Carica la tua canzone</p>
+            <p className="text-lg font-medium text-gray-300">Carica Audio</p>
             <p className="text-sm text-gray-500 mt-2">
-              {isTextOnly ? "Disabilitato in modalità testo" : "Trascina qui il file o clicca per selezionare (MP3, WAV)"}
+              {isTextOnly ? "Modalità Testo: Caricamento Audio Disabilitato" : "Trascina audio qui o clicca"}
             </p>
+          </div>
+        )}
+      </div>
+
+      {/* Image Upload Area (Always active, for fashion critic) */}
+      <div className="bg-dark-surface rounded-xl p-6 border border-gray-800">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <ImageIcon className="text-pink-400" size={20} />
+            <h3 className="font-semibold text-gray-200">Look & Immagine (Opzionale)</h3>
+          </div>
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            className="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1 rounded-lg transition-colors flex items-center gap-2"
+          >
+            <Camera size={14} /> Aggiungi Foto
+          </button>
+          <input
+            type="file"
+            ref={imageInputRef}
+            onChange={handleImageChange}
+            accept="image/*"
+            multiple
+            className="hidden"
+          />
+        </div>
+
+        {images.length > 0 ? (
+          <div className="flex flex-wrap gap-4">
+            {images.map((img, idx) => (
+              <div key={idx} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-gray-700">
+                <img src={URL.createObjectURL(img)} alt="upload" className="w-full h-full object-cover" />
+                <button
+                  onClick={() => removeImage(idx)}
+                  className="absolute top-0 right-0 p-1 bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => imageInputRef.current?.click()}
+              className="w-20 h-20 flex items-center justify-center border border-dashed border-gray-600 rounded-lg text-gray-500 hover:text-white hover:border-gray-400 transition-colors"
+            >
+              +
+            </button>
+          </div>
+        ) : (
+          <div
+            onClick={() => imageInputRef.current?.click()}
+            className="border border-dashed border-gray-700 rounded-lg p-6 text-center text-gray-500 hover:bg-gray-800/50 hover:border-pink-500/50 hover:text-pink-400 transition-all cursor-pointer"
+          >
+            <p className="text-sm">Trascina qui le foto dell'artista o del concerto.</p>
+            <p className="text-xs mt-1 opacity-70">Celestino Svolazzetti giudicherà l'outfit.</p>
           </div>
         )}
       </div>

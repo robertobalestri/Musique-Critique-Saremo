@@ -1,18 +1,17 @@
-import React, { useState } from 'react';
-import { PersonaId, AnalysisResponse } from './types';
-import { PERSONAS } from './constants';
+import React, { useState, useEffect } from 'react';
+import { Menu, X, ArrowLeft, Scissors, MessageSquare, Headphones, Download, RotateCcw, User } from 'lucide-react';
+import Sidebar from './components/Sidebar';
+import RoundtableSidebar from './components/RoundtableSidebar';
 import AnalysisForm from './components/AnalysisForm';
 import CritiqueView from './components/CritiqueView';
-import DiscussionView from './components/DiscussionView';
-import Sidebar from './components/Sidebar';
 import CriticProfile from './components/CriticProfile';
-
-import { analyzeSong, synthesizeReviews } from './services/geminiService';
+import AudioFeatureView from './components/AudioFeatureView';
+import { analyzeSong, generateDiscussionTurn, analyzeFashion, synthesizeReviews } from './services/geminiService';
 import { extractAudioFeatures } from './services/audioAnalysisService';
 import { exportToHTML } from './services/htmlExportService';
 import { exportToCSV } from './services/exportService';
-import AudioFeatureView from './components/AudioFeatureView';
-import { Headphones, Download, RotateCcw, Menu, X, User } from 'lucide-react';
+import { PersonaId, AnalysisResponse, ScorecardItem, DiscussionMessage } from './types';
+import { PERSONAS } from './constants';
 
 function App() {
   const [selectedPersona, setSelectedPersona] = useState<PersonaId>('traditionalist');
@@ -22,11 +21,28 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   const [audioAnalysisReport, setAudioAnalysisReport] = useState<string | null>(null);
+  // BETTER: Switch to fashionCritiques.
+  const [fashionCritiques, setFashionCritiques] = useState<Record<string, string> | null>(null);
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [averageScore, setAverageScore] = useState<number | null>(null);
   const [metadata, setMetadata] = useState({ artistName: '', songTitle: '', isBand: false });
 
   // State to toggle between single result view (if multiple exist)
+  // Roundtable State
+  const [isRoundtableOpen, setIsRoundtableOpen] = useState(false);
+  const [activeRoundtable, setActiveRoundtable] = useState<'music' | 'fashion'>('music');
+  const [discussionMessages, setDiscussionMessages] = useState<DiscussionMessage[]>([]);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+
+  // Analysis Context for Chat
+  const [lastAnalysisRequest, setLastAnalysisRequest] = useState<{
+    artist: string;
+    title: string;
+    lyrics?: string;
+    bio: string;
+    fashionCritique?: string;
+  } | null>(null);
+
   const [activeResultPersona, setActiveResultPersona] = useState<PersonaId | 'ALL'>('ALL');
 
   // NEW Navigation State
@@ -34,15 +50,61 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile toggle
   const [viewMode, setViewMode] = useState<'HOME' | 'SINGLE'>('HOME');
 
-  const handleAnalyze = async (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string, artistName: string, songTitle: string, isBand: boolean) => {
+  const handleAnalyze = async (
+    audio: File | undefined,
+    bio: string,
+    analyzeAll: boolean,
+    lyrics: string,
+    artistName: string,
+    songTitle: string,
+    isBand: boolean,
+    images: File[] // NEW
+  ) => {
     setIsLoading(true);
     setError(null);
     setResults(null);
     setAudioAnalysisReport(null);
+    setFashionCritiques(null);
     setMetadata({ artistName, songTitle, isBand });
 
     try {
-      // 1. Extract Audio Features first (for context) - only if audio exists
+      // 0. Analyze Fashion (if images present)
+      let fashionContextResult = "";
+      if (images && images.length > 0) {
+        try {
+          const fashionPersonas = Object.values(PERSONAS).filter(p => p.type === 'fashion');
+          const fashionResultsMap: Record<string, string> = {};
+
+          // Run all fashion analyses in parallel
+          const fashionPromises = fashionPersonas.map(async (p) => {
+            try {
+              const critique = await analyzeFashion(images, p.id, bio, artistName);
+              return { id: p.id, name: p.name, critique };
+            } catch (e) {
+              console.warn(`Fashion analysis failed for ${p.name}`, e);
+              return null;
+            }
+          });
+
+          const fashionResults = await Promise.all(fashionPromises);
+
+          fashionResults.forEach(res => {
+            if (res) {
+              fashionResultsMap[res.id] = res.critique;
+              fashionContextResult += `${res.name}: "${res.critique}"\n\n`;
+            }
+          });
+
+          if (Object.keys(fashionResultsMap).length > 0) {
+            setFashionCritiques(fashionResultsMap);
+          }
+
+        } catch (e) {
+          console.warn("Fashion analysis failed", e);
+        }
+      }
+
+      // 1. Extract Audio Features
       let audioContextReport = "Analisi solo testuale (Audio non fornito).";
       if (audio) {
         try {
@@ -55,16 +117,27 @@ function App() {
 
       const safeAudio = audio || undefined; // Ensure undefined if null
 
+      // Save context for chat
+      setLastAnalysisRequest({
+        artist: artistName,
+        title: songTitle,
+        lyrics,
+        bio,
+        fashionCritique: fashionContextResult || undefined
+      });
+
       if (analyzeAll) {
         // Parallel requests
-        const promises = Object.values(PERSONAS).map(persona =>
-          analyzeSong(safeAudio, bio, persona.id, audioContextReport, lyrics, artistName, songTitle, isBand)
+        const musicPersonas = Object.values(PERSONAS).filter(p => !p.type || p.type === 'music');
+
+        const promises = musicPersonas.map(persona => {
+          return analyzeSong(safeAudio, bio, persona.id, audioContextReport, lyrics, artistName, songTitle, isBand, fashionContextResult || undefined)
             .then(res => ({ id: persona.id, data: res }))
             .catch(e => {
               console.error(`Error analyzing with ${persona.name}`, e);
               return null;
-            })
-        );
+            });
+        }).filter(p => p !== null);
 
         const responses = await Promise.all(promises);
 
@@ -87,15 +160,17 @@ function App() {
 
         setResults(newResults);
         setActiveResultPersona('ALL');
+        setViewMode('HOME');
 
         // Trigger Editor Synthesis
         synthesizeReviews(newResults).then(text => setSynthesis(text));
 
       } else {
-        // Single request - uses selectedPersona which is set via Sidebar -> Profile -> Test
-        const response = await analyzeSong(safeAudio, bio, selectedPersona, audioContextReport, lyrics, artistName, songTitle, isBand);
+        // Single request
+        const response = await analyzeSong(safeAudio, bio, selectedPersona, audioContextReport, lyrics, artistName, songTitle, isBand, fashionContextResult || undefined);
         setResults({ [selectedPersona]: response });
         setActiveResultPersona(selectedPersona);
+        setViewMode('SINGLE');
       }
     } catch (err) {
       console.error(err);
@@ -110,6 +185,7 @@ function App() {
     setError(null);
     setResults(null);
     setAudioAnalysisReport(null);
+    setFashionCritiques(null);
 
     try {
       const report = await extractAudioFeatures(audio);
@@ -125,10 +201,42 @@ function App() {
   const resetAnalysis = () => {
     setResults(null);
     setAudioAnalysisReport(null);
+    setFashionCritiques(null);
     setSynthesis(null);
     setAverageScore(null);
     setError(null);
     setActiveResultPersona('ALL');
+  };
+
+  const handleGenerateDiscussion = async () => {
+    if (!lastAnalysisRequest) return;
+    setIsChatLoading(true);
+
+    try {
+      // Filter personas based on active roundtable
+      const availablePersonas = Object.values(PERSONAS).filter(p =>
+        activeRoundtable === 'music'
+          ? (!p.type || p.type === 'music')
+          : (p.type === 'fashion')
+      );
+
+      const randomPersona = availablePersonas[Math.floor(Math.random() * availablePersonas.length)];
+
+      const turn = await generateDiscussionTurn(
+        discussionMessages,
+        randomPersona.id,
+        lastAnalysisRequest.artist,
+        lastAnalysisRequest.title,
+        results ? results[randomPersona.id] : undefined,
+        activeRoundtable === 'fashion' ? (lastAnalysisRequest.fashionCritique) : undefined
+      );
+
+      setDiscussionMessages(prev => [...prev, { personaId: randomPersona.id, text: turn, timestamp: Date.now() }]);
+    } catch (e) {
+      console.error("Error generating chat:", e);
+    } finally {
+      setIsChatLoading(false);
+    }
   };
 
   const getSafeFilename = (ext: string) => {
@@ -184,6 +292,8 @@ function App() {
           <CritiqueView
             result={results[activeResultPersona]}
             personaId={activeResultPersona as PersonaId}
+            metadata={metadata}
+            fashionCritique={fashionCritiques ? Object.values(fashionCritiques).join("\n\n") : undefined}
             onReset={resetAnalysis}
           />
         </div>
@@ -223,6 +333,33 @@ function App() {
           )}
         </div>
 
+        {/* Fashion Critique Card */}
+        {/* Fashion Critic Section (Dynamic) */}
+        {fashionCritiques && Object.entries(fashionCritiques).map(([id, critique]) => {
+          const persona = PERSONAS[id];
+          return (
+            <div key={id} className={`max-w-4xl mx-auto -mt-6 mb-8 bg-gray-900 border rounded-2xl p-6 shadow-2xl relative overflow-hidden animate-in slide-in-from-top-4 duration-700 ${id === 'fashion_critic' ? 'border-pink-500/30' : 'border-orange-500/30'}`}>
+              <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12">
+                <Scissors size={100} className={id === 'fashion_critic' ? "text-pink-500" : "text-orange-500"} />
+              </div>
+              <div className="flex items-start gap-4 relative z-10">
+                <div className={`p-3 rounded-full border ${id === 'fashion_critic' ? 'bg-pink-900/40 border-pink-500/30' : 'bg-orange-900/40 border-orange-500/30'}`}>
+                  <Scissors className={id === 'fashion_critic' ? "text-pink-400" : "text-orange-400"} size={32} />
+                </div>
+                <div>
+                  <h3 className={`text-xl font-bold ${id === 'fashion_critic' ? 'text-pink-400' : 'text-orange-400'} mb-1`}>{persona.name}</h3>
+                  <p className="text-xs text-gray-400 mb-4 uppercase tracking-widest">{persona.subtitle}</p>
+                  <div className="prose prose-invert max-w-none">
+                    <p className="text-gray-200 italic leading-relaxed text-lg">
+                      "{critique}"
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
         {/* Grid of Mini Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {personaIds.map(id => {
@@ -247,8 +384,7 @@ function App() {
           })}
         </div>
 
-        {/* The Discussion Component */}
-        <DiscussionView results={results} />
+        {/* The Discussion Component - REMOVED, using Sidebar now */}
 
         <div className="flex justify-center gap-4 mt-12">
           <button
@@ -259,14 +395,28 @@ function App() {
           </button>
 
           <button
-            onClick={() => results && exportToCSV(results, synthesis, averageScore, metadata, getSafeFilename('csv'))}
+            onClick={() => results && exportToCSV(
+              results,
+              synthesis,
+              averageScore,
+              metadata,
+              getSafeFilename('csv'),
+              fashionCritiques ? Object.entries(fashionCritiques).map(([id, text]) => `${PERSONAS[id].name}: ${text}`).join("\n\n") : undefined
+            )}
             className="px-6 py-3 bg-gray-800 text-white rounded-full hover:bg-gray-700 transition-colors flex items-center gap-2"
           >
             <Download size={18} /> Esporta CSV
           </button>
 
           <button
-            onClick={() => results && exportToHTML(results, synthesis, averageScore, metadata, getSafeFilename('html'))}
+            onClick={() => results && exportToHTML(
+              results,
+              synthesis,
+              averageScore,
+              metadata,
+              getSafeFilename('html'),
+              fashionCritiques ? Object.entries(fashionCritiques).map(([id, text]) => `<strong>${PERSONAS[id].name}</strong>: ${text}`).join("\n\n") : undefined
+            )}
             className="px-6 py-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 transition-colors flex items-center gap-2 shadow-lg shadow-indigo-500/20"
           >
             <Download size={18} /> Esporta HTML
@@ -300,14 +450,44 @@ function App() {
         </div>
       )}
 
-      {/* Main Content */}
+      {/* Right Sidebar - Roundtable */}
+      <RoundtableSidebar
+        isOpen={isRoundtableOpen}
+        onClose={() => setIsRoundtableOpen(false)}
+        activeRoundtable={activeRoundtable}
+        onToggleRoundtable={setActiveRoundtable}
+        messages={discussionMessages}
+        isChatLoading={isChatLoading}
+        onGenerateTurn={handleGenerateDiscussion}
+        personas={PERSONAS}
+        hasContext={!!lastAnalysisRequest}
+      />
+
+      {/* Main Content Area */}
       <div className="flex-1 h-screen overflow-y-auto relative w-full">
 
         {/* Mobile Header Toggle */}
         <div className="md:hidden p-4 flex items-center justify-between border-b border-gray-800 bg-dark-bg/95 backdrop-blur sticky top-0 z-30">
           <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Saremo AI</span>
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-400">
-            {isSidebarOpen ? <X /> : <Menu />}
+          <div className="flex gap-2">
+            <button onClick={() => setIsRoundtableOpen(!isRoundtableOpen)} className="p-2 text-gray-400">
+              <MessageSquare size={20} />
+            </button>
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-400">
+              {isSidebarOpen ? <X /> : <Menu />}
+            </button>
+          </div>
+        </div>
+
+        {/* Desktop Right Sidebar Toggle (Absolute positioned) */}
+        <div className="hidden md:block absolute top-6 right-6 z-20">
+          <button
+            onClick={() => setIsRoundtableOpen((prev) => !prev)}
+            className={`p-3 rounded-xl text-white shadow-lg transition-all flex items-center gap-2 border border-gray-700 ${discussionMessages.length > 0 ? 'bg-indigo-600 border-indigo-500 animate-pulse' : 'bg-gray-800 hover:bg-gray-700'
+              }`}
+          >
+            <MessageSquare size={20} />
+            <span className="font-bold text-xs uppercase tracking-wider">Tavola Rotonda</span>
           </button>
         </div>
 

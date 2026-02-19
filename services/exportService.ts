@@ -6,7 +6,8 @@ export const exportToCSV = (
     synthesis: string | null,
     averageScore: number | null,
     metadata: { artistName: string; songTitle: string; isBand: boolean },
-    filename: string = 'analisi_musicale.csv'
+    filename: string = 'analisi_musicale.csv',
+    fashionCritique: string | null = null
 ) => {
     if (!results) return;
 
@@ -38,8 +39,9 @@ export const exportToCSV = (
         'Brano',
         'Media Critica',
         'Verdetto Editoriale (Caporedattore)',
+        'Critica Fashion', // Updated header
         'Critico',
-        'Voto Finale / 100',
+        'Voto Finale / 100', // ...
         'Sintesi Giornalistica',
         'Interpretazione Estesa',
         'Analisi Musicale',
@@ -78,6 +80,7 @@ export const exportToCSV = (
             if (header === 'Brano') return q(metadata.songTitle);
             if (header === 'Media Critica') return averageScore !== null ? averageScore : '""';
             if (header === 'Verdetto Editoriale (Caporedattore)') return q(synthesis);
+            if (header === 'Critica Fashion') return q(fashionCritique); // Updated map
 
             // -- Critic Data --
             if (header === 'Critico') return q(persona.name);

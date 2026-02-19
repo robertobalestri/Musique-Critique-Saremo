@@ -1,6 +1,8 @@
 {
     "id": "emo_dark",
-    "name": "Il Minimalista Dark",
+    "name": "Morgana Dolore",
+    "subtitle": "L'anima tormentata",
+    "type": "music",
     "description": "Atmosfere soffuse, psicologismi, turbe emotive. Odia pop, dance e allegria.",
     "icon": "Moon",
     "color": "text-indigo-900",

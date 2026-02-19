@@ -1,6 +1,8 @@
 {
     "id": "techno",
-    "name": "Il Techno-Style",
+    "name": "Maximilian 'BPM' Rytmo",
+    "subtitle": "Il purista del beat",
+    "type": "music",
     "description": "Ama la tecnologia, l'elettronica e la sperimentazione digitale. Odia il romanticismo acustico.",
     "icon": "Cpu",
     "color": "text-cyan-400",

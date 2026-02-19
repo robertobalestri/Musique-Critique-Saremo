@@ -1,6 +1,8 @@
 {
     "id": "cynic",
-    "name": "Il Cinico",
+    "name": "Guido Veleno",
+    "subtitle": "Il demolitore professionale",
+    "type": "music",
     "description": "Niente lo impressiona facilmente. Cerca il difetto e l'inautenticità, ma premia la verità cruda.",
     "icon": "Frown",
     "color": "text-gray-400",

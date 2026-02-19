@@ -6,7 +6,8 @@ export const exportToHTML = (
     synthesis: string | null,
     averageScore: number | null,
     metadata: { artistName: string; songTitle: string; isBand: boolean },
-    filename: string
+    filename: string,
+    fashionCritique: string | null = null
 ) => {
     const personaIds = Object.keys(results) as PersonaId[];
 
@@ -313,6 +314,13 @@ export const exportToHTML = (
             <div class="synthesis-card">
                 <h3 style="color: #f59e0b; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem; margin-bottom: 20px;">Verdetto Editoriale</h3>
                 <p class="synthesis-text">"${synthesis}"</p>
+            </div>
+            ` : ''}
+
+            ${fashionCritique ? `
+            <div class="synthesis-card" style="border-color: rgba(236, 72, 153, 0.3); background: linear-gradient(to bottom, #1f1a20, #110e13);">
+                <h3 style="color: #ec4899; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem; margin-bottom: 20px;">Critica Fashion / Look</h3>
+                <p class="synthesis-text" style="color: #fce7f3;">${fashionCritique.replace(/\n/g, '<br>')}</p>
             </div>
             ` : ''}
         </div>

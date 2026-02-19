@@ -7,10 +7,12 @@ import { exportToCSV } from '../services/exportService';
 interface CritiqueViewProps {
   result: AnalysisResponse;
   personaId: PersonaId;
+  metadata: { artistName: string; songTitle: string; isBand: boolean };
+  fashionCritique?: string | null;
   onReset: () => void;
 }
 
-const CritiqueView: React.FC<CritiqueViewProps> = ({ result, personaId, onReset }) => {
+const CritiqueView: React.FC<CritiqueViewProps> = ({ result, personaId, onReset, metadata, fashionCritique }) => {
   const persona = PERSONAS[personaId];
   const { lyricalAnalysis, musicalAnalysis } = result;
 
@@ -187,7 +189,7 @@ const CritiqueView: React.FC<CritiqueViewProps> = ({ result, personaId, onReset 
         </button>
 
         <button
-          onClick={() => exportToCSV({ [personaId]: result }, `analisi_${persona.name.replace(/\s+/g, '_')}_${Date.now()}.csv`)}
+          onClick={() => exportToCSV({ [personaId]: result }, null, null, metadata, `analisi_${persona.name.replace(/\s+/g, '_')}_${Date.now()}.csv`, fashionCritique)}
           className="flex items-center gap-2 px-8 py-4 bg-gray-800 hover:bg-gray-700 text-white rounded-full transition-all hover:scale-105 font-medium shadow-lg"
         >
           <Download size={20} />

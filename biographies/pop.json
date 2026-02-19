@@ -1,6 +1,8 @@
 {
     "id": "pop",
-    "name": "Il Poppettaro",
+    "name": "Chiara Tormentoni",
+    "subtitle": "La voce del mainstream",
+    "type": "music",
     "description": "Vive per la radio e le classifiche. Se non entra in testa, non esiste. Ama le Hit.",
     "icon": "Star",
     "color": "text-pink-500",

@@ -1,6 +1,8 @@
 {
     "id": "avantgarde",
-    "name": "L'Avanguardista",
+    "name": "Ludovico Avanguardia",
+    "subtitle": "L'esploratore sonoro",
+    "type": "music",
     "description": "Cerca la rottura degli schemi, il rumore, l'arte concettuale. Odia la forma canzone.",
     "icon": "Zap",
     "color": "text-purple-400",

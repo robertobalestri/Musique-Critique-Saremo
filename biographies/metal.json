@@ -1,6 +1,8 @@
 {
     "id": "metal",
-    "name": "Il Metallaro",
+    "name": "Rocco Ferraglia",
+    "subtitle": "Il guardiano del metallo",
+    "type": "music",
     "description": "Cerca potenza, tecnica e oscurità. Intollerante verso il pop commerciale e la leggerezza.",
     "icon": "Skull",
     "color": "text-red-700",

@@ -37,15 +37,82 @@ const getMimeType = (file: File): string => {
   return 'audio/mp3'; // Default fallback
 };
 
+export const analyzeFashion = async (
+  images: File[],
+  personaId: PersonaId,
+  bio: string,
+  artistName?: string
+): Promise<string> => {
+  const ai = getModel();
+  const critic = PERSONAS[personaId];
+  if (!critic) throw new Error(`Critico fashion non trovato: ${personaId}`);
+
+  const systemInstruction = `
+    Sei ${critic.name}.
+    ${critic.traits}
+    
+    Il tuo compito è giudicare L'OUTFIT, IL LOOK e LO STILE dell'artista basandoti sulle immagini fornite.
+    Non ti interessa la musica per ora, solo l'apparire.
+    
+    OUTPUT RICHIESTO:
+    Un breve paragrafo (max 500 caratteri) di critica stilistica.
+
+    Restituisci testo puro, senza formattazione markdown o simili.
+  `;
+
+  const userPrompt = `
+    Analizza il look di questo artista.
+    ${artistName ? `Artista: ${artistName}` : ""}
+    ${bio ? `Bio: ${bio}` : ""}
+    
+    Cosa ne pensi del loro stile? È coerente? È chic? È orribile?
+  `;
+
+  // Convert images to base64
+  const imageParts = await Promise.all(images.map(async (file) => {
+    const reader = new FileReader();
+    return new Promise<any>((resolve) => {
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        resolve({
+          inlineData: {
+            data: base64String.split(',')[1],
+            mimeType: file.type || 'image/jpeg'
+          }
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  }));
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: {
+        parts: [{ text: userPrompt }, ...imageParts]
+      },
+      config: {
+        systemInstruction: systemInstruction,
+      }
+    });
+
+    return response.text || `${critic.name} si rifiuta di commentare (Nessuna risposta).`;
+  } catch (error) {
+    console.error(`Errore analisi fashion (${critic.name}):`, error);
+    return `${critic.name} è confuso (Errore tecnico).`;
+  }
+};
+
 export const analyzeSong = async (
   audioFile: File | undefined,
   bio: string,
   personaId: PersonaId,
-  audioFeatures?: string, // New parameter (optional)
-  lyrics?: string, // New parameter (optional)
+  audioFeatures?: string,
+  lyrics?: string,
   artistName?: string,
   songTitle?: string,
-  isBand?: boolean
+  isBand?: boolean,
+  fashionContext?: string // NEW: Fashion critique context
 ): Promise<AnalysisResponse> => {
   const ai = getModel();
   const persona = PERSONAS[personaId];
@@ -79,6 +146,7 @@ export const analyzeSong = async (
     
     ${audioFeatures ? "**DATI TECNICI AUDIO (SOLO PER TUO RIFERIMENTO):**\n **ISTRUZIONE CRITICA SUI DATI TECNICI:**Usa questi dati per *informare* la tua analisi, ma **NON CITARE MAI I NUMERI ESPLICITAMENTE**." + audioFeatures : ""}
     
+    ${fashionContext ? `**NOTA SUL LOOK:**\n"${fashionContext}"\n(Usa questa info se pertinente alla tua critica, specialmente per valutare l' 'Immagine' o la 'Presence' se previsti, o per colorire la tua recensione. Se sei un purista della musica, potresti ignorarlo o disprezzarlo.)` : ""}
     
     ${!audioFile ? "**ATTENZIONE: Stai analizzando SOLO IL TESTO. Ignora le categorie puramente sonore della rubrica (o valutale in base alla metrica/ritmo del testo se possibile, o dai un voto neutro/intermedio se impossibile). Concentrati sulla lirica, il messaggio, la poetica.**" : ""}
 
@@ -92,15 +160,10 @@ export const analyzeSong = async (
 
     **RUBRICA DI CRITICA (I PESI SONO SPECIFICI PER TE):**
     ${rubricList}
-
-    **INTEPRETAZIONE PUNTEGGI:**
-    * **90–100:** Capolavoro.
-    * **80–89:** Eccellente.
-    * **70–79:** Forte.
-    * **60–69:** Buono ma imperfetto.
-    * **50–59:** Accettabile.
-    * **40–49:** Debole.
-    * **39 o meno:** Povero/Non funzionale.
+    
+    Restituisci testo puro, senza formattazione markdown o simili. 
+    Il calcolo del punteggio finale viene fatto in automatico: non scrivere il punteggio finale in nessuno dei tuoi commenti.
+    Interpreta ma non riprotare mai i dati tecnici sull'audio forniti in input.
   `;
 
   // ... (Response Schema remains same) ...
@@ -222,9 +285,12 @@ export const analyzeSong = async (
  * Generates a discussion turn (NON-STREAMING).
  */
 export const generateDiscussionTurn = async (
-  currentSpeakerId: PersonaId,
   history: DiscussionMessage[],
-  previousCritique: AnalysisResponse
+  currentSpeakerId: PersonaId,
+  artistName: string,
+  songTitle: string,
+  previousCritique?: AnalysisResponse,
+  fashionCritique?: string
 ): Promise<string> => {
   const ai = getModel();
   const persona = PERSONAS[currentSpeakerId];
@@ -234,32 +300,49 @@ export const generateDiscussionTurn = async (
     ? "La discussione sta iniziando ora."
     : history.map(msg => `${PERSONAS[msg.personaId].name}: "${msg.text}"`).join("\n\n");
 
+  let userContext = `BRANO: "${songTitle}" di ${artistName}\n`;
+
+  if (previousCritique) {
+    userContext += `IL TUO GIUDIZIO PRECEDENTE: Voto ${previousCritique.lyricalAnalysis.finalScore}/100. "${previousCritique.lyricalAnalysis.journalisticSummary}"\n`;
+  } else {
+    userContext += `(Non hai ancora analizzato formalmente questo brano, quindi basati sulla discussione in corso).\n`;
+  }
+
+  if (fashionCritique && persona.type === 'fashion') {
+    userContext += `TUA ANALISI FASHION PRECEDENTE: "${fashionCritique}"\n\n`;
+  } else if (fashionCritique) {
+    userContext += `NOTA FASHION: "${fashionCritique}"\n(Puoi commentare questo se vuoi, o ignorarlo).\n`;
+  }
+
   const systemPrompt = `
     Sei ${persona.name}.
     ${persona.traits}
     
-    Stai partecipando a una tavola rotonda con altri critici musicali per discutere di un brano che avete appena ascoltato.
+    Stai partecipando a una tavola rotonda con altri critici musicali (e di stile).
     
-    IL TUO GIUDIZIO PRECEDENTE SUL BRANO:
-    Voto: ${previousCritique.lyricalAnalysis.finalScore}/100
-    Analisi: ${previousCritique.musicalAnalysis || "N/A"}
+    CONTESTO:
+    ${userContext}
     
-    CONTESTO DISCUSSIONE:
+    STORICO DISCUSSIONE:
     ${conversationHistoryText}
     
     COMPITO:
-    Rispondi al commento precedente o fai un'osservazione.
-    - Mantieni il personaggio.
-    - Interagisci con gli altri.
+    Rispondi all'ultimo commento o fai un'osservazione pertinente.
+    - Mantieni RIGOROSAMENTE il tuo personaggio.
+    - Sii breve e incisivo (max 2 frasi).
+    - Se sei un critico musicale, parla di musica (testo, suono).
+    - Se sei il Fashion Critic, parla SOLO di look, stile e presenza scenica, ignorando la musica o trattandola con sufficienza.
+
+    Restituisci testo puro, senza formattazione markdown o simili.
   `;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: "Tocca a te. Rispondi.",
+      contents: [{ role: 'user', parts: [{ text: "Tocca a te. Intervieni." }] }],
       config: {
         systemInstruction: systemPrompt,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 200,
       }
     });
 

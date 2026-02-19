@@ -1,6 +1,8 @@
 {
     "id": "oldies",
-    "name": "L'Oldies",
+    "name": "Nonno Alcide",
+    "subtitle": "La nostalgia canaglia",
+    "type": "music",
     "description": "Nostalgico dei 'buoni sentimenti'. Cerca rassicurazione, melodia e relax da divano.",
     "icon": "Radio",
     "color": "text-emerald-600",

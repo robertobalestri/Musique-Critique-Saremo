@@ -3,7 +3,9 @@ export type PersonaId = string;
 export interface CriticPersona {
   id: PersonaId;
   name: string;
+  subtitle: string; // NEW: Short description/title
   description: string;
+  type: 'music' | 'fashion'; // NEW: Category
   icon: string;
   traits: string;
   color: string;
@@ -39,6 +41,12 @@ export interface LyricalAnalysis {
 export interface AnalysisResponse {
   musicalAnalysis?: string | null;
   lyricalAnalysis: LyricalAnalysis;
+}
+
+export interface FashionAnalysis {
+  critique: string;
+  score: number;
+  comment: string;
 }
 
 export interface DiscussionMessage {

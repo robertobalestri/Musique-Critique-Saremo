@@ -18,36 +18,82 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectCritic, selectedCriticId }) =
                 <p className="text-xs text-gray-500 mt-2">Seleziona un esperto per conoscerlo meglio.</p>
             </div>
 
-            <nav className="flex-1 p-4 space-y-2">
-                {Object.values(PERSONAS).map((persona) => {
-                    // Dynamic Icon
-                    const IconComponent = (Icons as any)[persona.icon] || Icons.User;
+            <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
+                {/* Music Critics Section */}
+                <div>
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 px-2">
+                        I Nostri Critici Musicali
+                    </h3>
+                    <div className="space-y-1">
+                        {Object.values(PERSONAS)
+                            .filter(p => !p.type || p.type === 'music')
+                            .map((persona) => {
+                                const IconComponent = (Icons as any)[persona.icon] || Icons.User;
+                                const isSelected = selectedCriticId === persona.id;
+                                return (
+                                    <button
+                                        key={persona.id}
+                                        onClick={() => onSelectCritic(persona.id)}
+                                        className={`
+                                            w-full flex items-center gap-3 p-2 rounded-lg transition-all text-left group
+                                            ${isSelected
+                                                ? 'bg-indigo-900/30 border border-indigo-500/30 text-white'
+                                                : 'hover:bg-gray-800/50 text-gray-400 hover:text-white border border-transparent'}
+                                        `}
+                                    >
+                                        <div className={`
+                                            p-1.5 rounded-md transition-colors 
+                                            ${isSelected ? 'bg-indigo-600 shadow-lg shadow-indigo-500/20' : 'bg-gray-800 group-hover:bg-gray-700'}
+                                        `}>
+                                            <IconComponent size={16} className={isSelected ? 'text-white' : persona.color} />
+                                        </div>
+                                        <div className="flex flex-col overflow-hidden">
+                                            <div className={`font-semibold text-sm ${persona.color} truncate`}>{persona.name}</div>
+                                            <div className="text-xs text-gray-500 truncate">{persona.subtitle}</div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                    </div>
+                </div>
 
-                    return (
-                        <button
-                            key={persona.id}
-                            onClick={() => onSelectCritic(persona.id)}
-                            className={`
-                w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left group
-                ${selectedCriticId === persona.id
-                                    ? 'bg-indigo-900/30 border border-indigo-500/30 text-white'
-                                    : 'hover:bg-gray-800/50 text-gray-400 hover:text-white border border-transparent'}
-              `}
-                        >
-                            <div className={`
-                p-2 rounded-md transition-colors 
-                ${selectedCriticId === persona.id ? 'bg-indigo-600 shadow-lg shadow-indigo-500/20' : 'bg-gray-800 group-hover:bg-gray-700'}
-              `}>
-                                <IconComponent size={18} className={selectedCriticId === persona.id ? 'text-white' : persona.color} />
-                            </div>
-
-                            <div>
-                                <div className={`font-semibold text-sm ${persona.color}`}>{persona.name}</div>
-                                {/* Optional: Tiny description or role if needed, kept minimal for sidebar */}
-                            </div>
-                        </button>
-                    );
-                })}
+                {/* Fashion Critics Section */}
+                <div>
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 px-2 border-t border-gray-800 pt-4">
+                        I Nostri Critici Fashion
+                    </h3>
+                    <div className="space-y-1">
+                        {Object.values(PERSONAS)
+                            .filter(p => p.type === 'fashion')
+                            .map((persona) => {
+                                const IconComponent = (Icons as any)[persona.icon] || Icons.User;
+                                const isSelected = selectedCriticId === persona.id;
+                                return (
+                                    <button
+                                        key={persona.id}
+                                        onClick={() => onSelectCritic(persona.id)}
+                                        className={`
+                                            w-full flex items-center gap-3 p-2 rounded-lg transition-all text-left group
+                                            ${isSelected
+                                                ? 'bg-pink-900/30 border border-pink-500/30 text-white' // Specific styling for fashion selection? or keep consistent? Let's keep consistent but maybe slight pink hint
+                                                : 'hover:bg-gray-800/50 text-gray-400 hover:text-white border border-transparent'}
+                                        `}
+                                    >
+                                        <div className={`
+                                            p-1.5 rounded-md transition-colors 
+                                            ${isSelected ? 'bg-pink-600 shadow-lg shadow-pink-500/20' : 'bg-gray-800 group-hover:bg-gray-700'}
+                                        `}>
+                                            <IconComponent size={16} className={isSelected ? 'text-white' : persona.color} />
+                                        </div>
+                                        <div className="flex flex-col overflow-hidden">
+                                            <div className={`font-semibold text-sm ${persona.color} truncate`}>{persona.name}</div>
+                                            <div className="text-xs text-gray-500 truncate">{persona.subtitle}</div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                    </div>
+                </div>
             </nav>
 
             <div className="p-4 border-t border-gray-800 text-center">
