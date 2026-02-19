@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ArrowLeft, Scissors, MessageSquare, Headphones, Download, RotateCcw, User } from 'lucide-react';
+import { Menu, X, Scissors, MessageSquare, Headphones, Download, RotateCcw, User, Loader2 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import RoundtableSidebar from './components/RoundtableSidebar';
 import AnalysisForm from './components/AnalysisForm';
@@ -10,7 +10,7 @@ import { analyzeSong, generateDiscussionTurn, analyzeFashion, synthesizeReviews 
 import { extractAudioFeatures } from './services/audioAnalysisService';
 import { exportToHTML } from './services/htmlExportService';
 import { exportToCSV } from './services/exportService';
-import { PersonaId, AnalysisResponse, ScorecardItem, DiscussionMessage } from './types';
+import { PersonaId, AnalysisResponse, DiscussionMessage } from './types';
 import { PERSONAS } from './constants';
 
 function App() {
@@ -30,9 +30,15 @@ function App() {
   // State to toggle between single result view (if multiple exist)
   // Roundtable State
   const [isRoundtableOpen, setIsRoundtableOpen] = useState(false);
-  const [activeRoundtable, setActiveRoundtable] = useState<'music' | 'fashion'>('music');
-  const [discussionMessages, setDiscussionMessages] = useState<DiscussionMessage[]>([]);
+  const [activeRoundtable, setActiveRoundtable] = useState<'music' | 'fashion' | 'all'>('music');
+  const [discussionMessages, setDiscussionMessages] = useState<Record<'music' | 'fashion' | 'all', DiscussionMessage[]>>({
+    music: [],
+    fashion: [],
+    all: []
+  });
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [isChatLoading, setIsChatLoading] = useState(false);
+
 
   // Analysis Context for Chat
   const [lastAnalysisRequest, setLastAnalysisRequest] = useState<{
@@ -46,9 +52,63 @@ function App() {
   const [activeResultPersona, setActiveResultPersona] = useState<PersonaId | 'ALL'>('ALL');
 
   // NEW Navigation State
+  // NEW Navigation State
+  // NEW Navigation State
   const [viewingCritic, setViewingCritic] = useState<PersonaId | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile toggle
   const [viewMode, setViewMode] = useState<'HOME' | 'SINGLE'>('HOME');
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Load state from local storage on mount
+  useEffect(() => {
+    const savedState = localStorage.getItem('saremo_analysis_state');
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        if (parsed.results) setResults(parsed.results);
+        if (parsed.audioAnalysisReport) setAudioAnalysisReport(parsed.audioAnalysisReport);
+        if (parsed.fashionCritiques) setFashionCritiques(parsed.fashionCritiques);
+        if (parsed.synthesis) setSynthesis(parsed.synthesis);
+        if (parsed.averageScore) setAverageScore(parsed.averageScore);
+        if (parsed.metadata) setMetadata(parsed.metadata);
+        if (parsed.lastAnalysisRequest) setLastAnalysisRequest(parsed.lastAnalysisRequest);
+        // Backward compatibility check for array vs object
+        if (parsed.discussionMessages) {
+          if (Array.isArray(parsed.discussionMessages)) {
+            setDiscussionMessages({ music: parsed.discussionMessages, fashion: [], all: [] });
+          } else {
+            setDiscussionMessages(parsed.discussionMessages);
+          }
+        }
+
+        // Restore view mode if there were results
+        if (parsed.results || parsed.audioAnalysisReport) {
+          setViewMode('HOME');
+          setActiveResultPersona('ALL');
+        }
+      } catch (e) {
+        console.error("Failed to load state", e);
+      }
+    }
+    setIsInitialized(true);
+  }, []);
+
+  // Save state to local storage whenever relevant state changes
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const stateToSave = {
+      results,
+      audioAnalysisReport,
+      fashionCritiques,
+      synthesis,
+      averageScore,
+      metadata,
+      lastAnalysisRequest,
+      discussionMessages
+    };
+    localStorage.setItem('saremo_analysis_state', JSON.stringify(stateToSave));
+  }, [results, audioAnalysisReport, fashionCritiques, synthesis, averageScore, metadata, lastAnalysisRequest, discussionMessages, isInitialized]);
 
   const handleAnalyze = async (
     audio: File | undefined,
@@ -163,7 +223,10 @@ function App() {
         setViewMode('HOME');
 
         // Trigger Editor Synthesis
-        synthesizeReviews(newResults).then(text => setSynthesis(text));
+        setIsSynthesizing(true);
+        synthesizeReviews(newResults)
+          .then(text => setSynthesis(text))
+          .finally(() => setIsSynthesizing(false));
 
       } else {
         // Single request
@@ -172,6 +235,10 @@ function App() {
         setActiveResultPersona(selectedPersona);
         setViewMode('SINGLE');
       }
+
+      // Auto-open Roundtable after successful analysis
+      setIsRoundtableOpen(true);
+
     } catch (err) {
       console.error(err);
       setError("Si è verificato un errore durante l'analisi. Riprova più tardi o controlla la tua chiave API.");
@@ -203,40 +270,79 @@ function App() {
     setAudioAnalysisReport(null);
     setFashionCritiques(null);
     setSynthesis(null);
+    setIsSynthesizing(false);
     setAverageScore(null);
     setError(null);
     setActiveResultPersona('ALL');
+    setDiscussionMessages({ music: [], fashion: [], all: [] }); // Reset all histories
+    setLastAnalysisRequest(null);
+    localStorage.removeItem('saremo_analysis_state');
   };
 
-  const handleGenerateDiscussion = async () => {
+  const handleAutoDiscussion = async (count: number) => {
     if (!lastAnalysisRequest) return;
     setIsChatLoading(true);
 
     try {
-      // Filter personas based on active roundtable
-      const availablePersonas = Object.values(PERSONAS).filter(p =>
-        activeRoundtable === 'music'
-          ? (!p.type || p.type === 'music')
-          : (p.type === 'fashion')
-      );
+      const currentMode = activeRoundtable;
+      let currentHistory = [...discussionMessages[currentMode]];
+      let lastSpeakerId: PersonaId | null = currentHistory.length > 0 ? currentHistory[currentMode][currentHistory[currentMode].length - 1].personaId : null;
 
-      const randomPersona = availablePersonas[Math.floor(Math.random() * availablePersonas.length)];
+      for (let i = 0; i < count; i++) {
+        // Filter personas based on active roundtable
+        const availablePersonas = Object.values(PERSONAS).filter(p => {
+          if (activeRoundtable === 'music') return (!p.type || p.type === 'music');
+          if (activeRoundtable === 'fashion') return (p.type === 'fashion');
+          return true; // 'all' includes everyone
+        });
 
-      const turn = await generateDiscussionTurn(
-        discussionMessages,
-        randomPersona.id,
-        lastAnalysisRequest.artist,
-        lastAnalysisRequest.title,
-        results ? results[randomPersona.id] : undefined,
-        activeRoundtable === 'fashion' ? (lastAnalysisRequest.fashionCritique) : undefined
-      );
+        // Exclude last speaker if possible
+        const candidates = availablePersonas.filter(p => p.id !== lastSpeakerId);
+        // Fallback to all if candidates empty (shouldn't happen with >1 critic)
+        const pool = candidates.length > 0 ? candidates : availablePersonas;
 
-      setDiscussionMessages(prev => [...prev, { personaId: randomPersona.id, text: turn, timestamp: Date.now() }]);
+        const randomPersona = pool[Math.floor(Math.random() * pool.length)];
+
+        // Generate turn using CURRENT history (not state, which is stale in loop)
+        const turn = await generateDiscussionTurn(
+          currentHistory,
+          randomPersona.id,
+          lastAnalysisRequest.artist,
+          lastAnalysisRequest.title,
+          results ? results[randomPersona.id] : undefined,
+          activeRoundtable === 'fashion' ? (lastAnalysisRequest.fashionCritique) : undefined
+        );
+
+        const newMessage: DiscussionMessage = {
+          personaId: randomPersona.id,
+          text: turn,
+          timestamp: Date.now()
+        };
+
+        currentHistory = [...currentHistory, newMessage];
+        lastSpeakerId = randomPersona.id;
+
+        // Update state progressively for specific mode
+        setDiscussionMessages(prev => ({
+          ...prev,
+          [currentMode]: [...prev[currentMode], newMessage]
+        }));
+
+        // Small delay purely for UX pacing? No, let's keep it fast but await.
+      }
+
     } catch (e) {
       console.error("Error generating chat:", e);
     } finally {
       setIsChatLoading(false);
     }
+  };
+
+  const handleClearRoundtable = () => {
+    setDiscussionMessages(prev => ({
+      ...prev,
+      [activeRoundtable]: []
+    }));
   };
 
   const getSafeFilename = (ext: string) => {
@@ -318,17 +424,25 @@ function App() {
             </div>
           )}
 
-          {synthesis && (
-            <div className="max-w-3xl mx-auto mt-6 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-700 p-8 rounded-2xl shadow-xl relative overflow-hidden">
+          {(synthesis || isSynthesizing) && (
+            <div className="max-w-3xl mx-auto mt-6 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-700 p-8 rounded-2xl shadow-xl relative overflow-hidden min-h-[160px] flex flex-col justify-center">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent opacity-50"></div>
               <h3 className="text-amber-500 text-xs font-bold uppercase tracking-widest mb-4 flex justify-center items-center gap-2">
                 <span className="w-8 h-[1px] bg-amber-500/50"></span>
                 Verdetto Editoriale
                 <span className="w-8 h-[1px] bg-amber-500/50"></span>
               </h3>
-              <p className="text-xl font-serif italic text-gray-200 leading-relaxed">
-                "{synthesis}"
-              </p>
+
+              {isSynthesizing ? (
+                <div className="flex flex-col items-center justify-center gap-3 animate-pulse">
+                  <Loader2 className="animate-spin text-amber-500" size={32} />
+                  <p className="text-gray-400 italic text-sm">Il Caporedattore sta riassumendo i giudizi...</p>
+                </div>
+              ) : (
+                <p className="text-xl font-serif italic text-gray-200 leading-relaxed text-center">
+                  "{synthesis}"
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -434,6 +548,7 @@ function App() {
         <Sidebar
           onSelectCritic={setViewingCritic}
           selectedCriticId={viewingCritic}
+          onNewAnalysis={resetAnalysis}
         />
       </div>
 
@@ -444,24 +559,33 @@ function App() {
             <Sidebar onSelectCritic={(id) => {
               setViewingCritic(id);
               setIsSidebarOpen(false);
-            }} />
+            }}
+              onNewAnalysis={() => {
+                resetAnalysis();
+                setIsSidebarOpen(false);
+              }}
+            />
           </div>
           <div className="flex-1 bg-black/50 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)}></div>
         </div>
       )}
 
-      {/* Right Sidebar - Roundtable */}
-      <RoundtableSidebar
-        isOpen={isRoundtableOpen}
-        onClose={() => setIsRoundtableOpen(false)}
-        activeRoundtable={activeRoundtable}
-        onToggleRoundtable={setActiveRoundtable}
-        messages={discussionMessages}
-        isChatLoading={isChatLoading}
-        onGenerateTurn={handleGenerateDiscussion}
-        personas={PERSONAS}
-        hasContext={!!lastAnalysisRequest}
-      />
+      {/* Right Sidebar - Roundtable (Mobile Overlay or Desktop without Results) */}
+      <div className={results ? "md:hidden" : ""}>
+        <RoundtableSidebar
+          isOpen={isRoundtableOpen}
+          onClose={() => setIsRoundtableOpen(false)}
+          activeRoundtable={activeRoundtable}
+          onToggleRoundtable={setActiveRoundtable}
+          messages={discussionMessages[activeRoundtable]}
+          isChatLoading={isChatLoading}
+          onGenerateTurn={handleAutoDiscussion}
+          onClearChat={handleClearRoundtable}
+          personas={PERSONAS}
+          hasContext={!!lastAnalysisRequest}
+          variant="overlay"
+        />
+      </div>
 
       {/* Main Content Area */}
       <div className="flex-1 h-screen overflow-y-auto relative w-full">
@@ -479,17 +603,12 @@ function App() {
           </div>
         </div>
 
-        {/* Desktop Right Sidebar Toggle (Absolute positioned) */}
-        <div className="hidden md:block absolute top-6 right-6 z-20">
-          <button
-            onClick={() => setIsRoundtableOpen((prev) => !prev)}
-            className={`p-3 rounded-xl text-white shadow-lg transition-all flex items-center gap-2 border border-gray-700 ${discussionMessages.length > 0 ? 'bg-indigo-600 border-indigo-500 animate-pulse' : 'bg-gray-800 hover:bg-gray-700'
-              }`}
-          >
-            <MessageSquare size={20} />
-            <span className="font-bold text-xs uppercase tracking-wider">Tavola Rotonda</span>
-          </button>
-        </div>
+        {/* Desktop Right Sidebar Toggle (Absolute positioned) - Show only if NO results (i.e. Home) but context exists? 
+            actually if no results, we might not want it at all on desktop? 
+            Original code showed it ONLY if results. 
+            Now we show sidebar STATICALLY if results. 
+            So we fully remove this floating toggler for desktop results.
+        */}
 
         {/* Background decoration */}
         <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
@@ -586,6 +705,25 @@ function App() {
           </footer>
         </div>
       </div>
+
+      {/* Right Sidebar - Static Column (Desktop Only, When Results Exist) */}
+      {results && (
+        <div className="hidden md:block w-96 shrink-0 h-screen sticky top-0 bg-gray-900 border-l border-gray-800 z-10">
+          <RoundtableSidebar
+            isOpen={true} // Static mode ignores this, but prop required
+            onClose={() => { }} // No-op
+            activeRoundtable={activeRoundtable}
+            onToggleRoundtable={setActiveRoundtable}
+            messages={discussionMessages[activeRoundtable]}
+            isChatLoading={isChatLoading}
+            onGenerateTurn={handleAutoDiscussion}
+            onClearChat={handleClearRoundtable}
+            personas={PERSONAS}
+            hasContext={!!lastAnalysisRequest}
+            variant="static"
+          />
+        </div>
+      )}
 
       {/* Critic Profile Modal */}
       {viewingCritic && (

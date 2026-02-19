@@ -1,17 +1,18 @@
 import React, { useRef, useEffect } from 'react';
-import { X, MessageSquare, Music, Shirt, Loader2, User } from 'lucide-react';
+import { X, MessageSquare, Music, Shirt, Loader2, User, Trash2 } from 'lucide-react';
 import { CriticPersona, DiscussionMessage } from '../types';
 
 interface RoundtableSidebarProps {
     isOpen: boolean;
     onClose: () => void;
-    activeRoundtable: 'music' | 'fashion';
-    onToggleRoundtable: (type: 'music' | 'fashion') => void;
+    activeRoundtable: 'music' | 'fashion' | 'all';
+    onToggleRoundtable: (type: 'music' | 'fashion' | 'all') => void;
     messages: DiscussionMessage[];
     isChatLoading: boolean;
-    onGenerateTurn: () => void;
+    onGenerateTurn: (count: number) => void;
+    onClearChat: () => void;
     personas: Record<string, CriticPersona>;
-    hasContext: boolean;
+    variant?: 'overlay' | 'static';
 }
 
 const RoundtableSidebar: React.FC<RoundtableSidebarProps> = ({
@@ -22,8 +23,10 @@ const RoundtableSidebar: React.FC<RoundtableSidebarProps> = ({
     messages,
     isChatLoading,
     onGenerateTurn,
+    onClearChat,
     personas,
-    hasContext
+    hasContext,
+    variant = 'overlay'
 }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -33,9 +36,150 @@ const RoundtableSidebar: React.FC<RoundtableSidebarProps> = ({
         }
     }, [messages, isChatLoading]);
 
-    // If closed on mobile, render nothing (or use CSS transition)
-    // But for simple "overlay" logic:
-    // We use fixed positioning.
+    const [turnCount, setTurnCount] = React.useState(1);
+
+    if (variant === 'static') {
+        return (
+            <div className="h-full flex flex-col bg-gray-900 border-l border-gray-800 shadow-xl">
+                {/* Header */}
+                <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-gray-900/95 backdrop-blur z-10 relative">
+                    <div className="flex items-center gap-2">
+                        <MessageSquare className="text-indigo-400" size={24} />
+                        <h2 className="text-xl font-bold text-white">Tavola Rotonda</h2>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={onClearChat}
+                            className="p-2 text-gray-400 hover:text-red-400 rounded-full hover:bg-gray-800 transition-colors"
+                            title="Cancella Chat"
+                        >
+                            <Trash2 size={20} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Toggle Controls */}
+                <div className="p-4 border-b border-gray-800 bg-gray-900/50">
+                    <div className="flex bg-gray-800 p-1 rounded-lg">
+                        <button
+                            onClick={() => onToggleRoundtable('music')}
+                            className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1 ${activeRoundtable === 'music'
+                                ? 'bg-indigo-600 text-white shadow-lg'
+                                : 'text-gray-400 hover:text-gray-200'
+                                }`}
+                        >
+                            <Music size={14} />
+                            Musica
+                        </button>
+                        <button
+                            onClick={() => onToggleRoundtable('fashion')}
+                            className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1 ${activeRoundtable === 'fashion'
+                                ? 'bg-pink-600 text-white shadow-lg'
+                                : 'text-gray-400 hover:text-gray-200'
+                                }`}
+                        >
+                            <Shirt size={14} />
+                            Fashion
+                        </button>
+                        <button
+                            onClick={() => onToggleRoundtable('all')}
+                            className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1 ${activeRoundtable === 'all'
+                                ? 'bg-amber-600 text-white shadow-lg'
+                                : 'text-gray-400 hover:text-gray-200'
+                                }`}
+                        >
+                            <User size={14} />
+                            Misti
+                        </button>
+                    </div>
+                    <p className="text-xs text-center mt-2 text-gray-500">
+                        {activeRoundtable === 'music'
+                            ? "Dibattito musicale."
+                            : activeRoundtable === 'fashion'
+                                ? "Angolo dello stile."
+                                : "Tutti contro tutti."}
+                    </p>
+                </div>
+
+                {/* Messages Area */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>
+                    {!hasContext ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-500">
+                            <MessageSquare size={48} className="mb-4 opacity-20" />
+                            <p>Effettua prima un'analisi per avviare la discussione.</p>
+                        </div>
+                    ) : messages.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-500">
+                            <p>Nessun messaggio ancora.</p>
+                            <p className="text-sm mt-2">Invita qualcuno a parlare!</p>
+                        </div>
+                    ) : (
+                        messages.map((msg, idx) => {
+                            const persona = personas[msg.personaId];
+                            if (!persona) return null;
+
+                            return (
+                                <div key={idx} className="flex gap-3 animate-in slide-in-from-left-2 duration-300">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${persona.color.replace('text-', 'bg-')} bg-opacity-20`}>
+                                        <User size={14} className={persona.color} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-baseline justify-between mb-1">
+                                            <span className={`font-bold text-sm ${persona.color}`}>{persona.name}</span>
+                                        </div>
+                                        <div className="bg-gray-800 rounded-lg rounded-tl-none p-3 text-sm text-gray-300 shadow-sm border border-gray-700/50 whitespace-pre-wrap break-words">
+                                            {msg.text}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+
+                    {isChatLoading && (
+                        <div className="flex gap-3 animate-pulse">
+                            <div className="w-8 h-8 rounded-full bg-gray-800 shrink-0" />
+                            <div className="bg-gray-800 rounded-lg p-3 h-10 w-24" />
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer Actions */}
+                <div className="p-4 border-t border-gray-800 bg-gray-900 z-10 flex gap-2">
+                    <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={turnCount}
+                        onChange={(e) => setTurnCount(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-16 bg-gray-800 border-gray-700 rounded-lg text-center font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                    <button
+                        onClick={() => onGenerateTurn(turnCount)}
+                        disabled={!hasContext || isChatLoading}
+                        className={`flex-1 py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all ${!hasContext || isChatLoading
+                            ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                            : activeRoundtable === 'music'
+                                ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                                : 'bg-pink-600 hover:bg-pink-500 text-white shadow-lg shadow-pink-500/20'
+                            }`}
+                    >
+                        {isChatLoading ? (
+                            <>
+                                <Loader2 className="animate-spin" size={18} />
+                                Sto Scrivendo...
+                            </>
+                        ) : (
+                            <>
+                                <MessageSquare size={18} />
+                                Avvia Discussione
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <>
@@ -56,9 +200,18 @@ const RoundtableSidebar: React.FC<RoundtableSidebarProps> = ({
                         <MessageSquare className="text-indigo-400" size={24} />
                         <h2 className="text-xl font-bold text-white">Tavola Rotonda</h2>
                     </div>
-                    <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-800">
-                        <X size={24} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={onClearChat}
+                            className="p-2 text-gray-400 hover:text-red-400 rounded-full hover:bg-gray-800 transition-colors"
+                            title="Cancella Chat"
+                        >
+                            <Trash2 size={20} />
+                        </button>
+                        <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-800">
+                            <X size={24} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Toggle Controls */}
@@ -66,34 +219,46 @@ const RoundtableSidebar: React.FC<RoundtableSidebarProps> = ({
                     <div className="flex bg-gray-800 p-1 rounded-lg">
                         <button
                             onClick={() => onToggleRoundtable('music')}
-                            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeRoundtable === 'music'
-                                    ? 'bg-indigo-600 text-white shadow-lg'
-                                    : 'text-gray-400 hover:text-gray-200'
+                            className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1 ${activeRoundtable === 'music'
+                                ? 'bg-indigo-600 text-white shadow-lg'
+                                : 'text-gray-400 hover:text-gray-200'
                                 }`}
                         >
-                            <Music size={16} />
+                            <Music size={14} />
                             Musica
                         </button>
                         <button
                             onClick={() => onToggleRoundtable('fashion')}
-                            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeRoundtable === 'fashion'
-                                    ? 'bg-pink-600 text-white shadow-lg'
-                                    : 'text-gray-400 hover:text-gray-200'
+                            className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1 ${activeRoundtable === 'fashion'
+                                ? 'bg-pink-600 text-white shadow-lg'
+                                : 'text-gray-400 hover:text-gray-200'
                                 }`}
                         >
-                            <Shirt size={16} />
+                            <Shirt size={14} />
                             Fashion
+                        </button>
+                        <button
+                            onClick={() => onToggleRoundtable('all')}
+                            className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1 ${activeRoundtable === 'all'
+                                ? 'bg-amber-600 text-white shadow-lg'
+                                : 'text-gray-400 hover:text-gray-200'
+                                }`}
+                        >
+                            <User size={14} /> {/* Or Users icon */}
+                            Misti
                         </button>
                     </div>
                     <p className="text-xs text-center mt-2 text-gray-500">
                         {activeRoundtable === 'music'
-                            ? "Il dibattito musicale tra i critici."
-                            : "L'angolo dello stile con Celestino (e ospiti)."}
+                            ? "Dibattito musicale."
+                            : activeRoundtable === 'fashion'
+                                ? "Angolo dello stile."
+                                : "Tutti contro tutti."}
                     </p>
                 </div>
 
                 {/* Messages Area */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 h-[calc(100%-13rem)]" ref={scrollRef}>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 h-[calc(100%-13rem)] pb-32" ref={scrollRef}>
                     {!hasContext ? (
                         <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-500">
                             <MessageSquare size={48} className="mb-4 opacity-20" />
@@ -129,7 +294,7 @@ const RoundtableSidebar: React.FC<RoundtableSidebarProps> = ({
                                         <div className="flex items-baseline justify-between mb-1">
                                             <span className={`font-bold text-sm ${persona.color}`}>{persona.name}</span>
                                         </div>
-                                        <div className="bg-gray-800 rounded-lg rounded-tl-none p-3 text-sm text-gray-300 shadow-sm border border-gray-700/50">
+                                        <div className="bg-gray-800 rounded-lg rounded-tl-none p-3 text-sm text-gray-300 shadow-sm border border-gray-700/50 whitespace-pre-wrap break-words">
                                             {msg.text}
                                         </div>
                                     </div>
@@ -147,26 +312,34 @@ const RoundtableSidebar: React.FC<RoundtableSidebarProps> = ({
                 </div>
 
                 {/* Footer Actions */}
-                <div className="absolute bottom-0 left-0 w-full p-4 border-t border-gray-800 bg-gray-900 z-10">
+                <div className="absolute bottom-0 left-0 w-full p-4 border-t border-gray-800 bg-gray-900 z-10 flex gap-2">
+                    <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={turnCount}
+                        onChange={(e) => setTurnCount(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-16 bg-gray-800 border-gray-700 rounded-lg text-center font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
                     <button
-                        onClick={onGenerateTurn}
+                        onClick={() => onGenerateTurn(turnCount)}
                         disabled={!hasContext || isChatLoading}
-                        className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all ${!hasContext || isChatLoading
-                                ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                                : activeRoundtable === 'music'
-                                    ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-                                    : 'bg-pink-600 hover:bg-pink-500 text-white shadow-lg shadow-pink-500/20'
+                        className={`flex-1 py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all ${!hasContext || isChatLoading
+                            ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                            : activeRoundtable === 'music'
+                                ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                                : 'bg-pink-600 hover:bg-pink-500 text-white shadow-lg shadow-pink-500/20'
                             }`}
                     >
                         {isChatLoading ? (
                             <>
                                 <Loader2 className="animate-spin" size={18} />
-                                Sta scrivendo...
+                                Sto Scrivendo...
                             </>
                         ) : (
                             <>
                                 <MessageSquare size={18} />
-                                Genera Intervento
+                                Avvia Discussione
                             </>
                         )}
                     </button>

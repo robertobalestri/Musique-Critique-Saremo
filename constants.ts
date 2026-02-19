@@ -1,8 +1,8 @@
 import { CriticPersona, PersonaId } from './types';
 import { BookOpen, Frown, Sparkles, Zap, Skull } from 'lucide-react';
 
-// Load personas dynamically from JSON files in the biographies folder
-const personaFiles = import.meta.glob('./biographies/*.json', { eager: true });
+// Load personas dynamically from JSON files in the biographies folder (and subfolders)
+const personaFiles = import.meta.glob('./biographies/**/*.json', { eager: true });
 
 export const PERSONAS: Record<PersonaId, CriticPersona> = {};
 

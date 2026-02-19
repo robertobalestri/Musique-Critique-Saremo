@@ -342,7 +342,6 @@ export const generateDiscussionTurn = async (
       contents: [{ role: 'user', parts: [{ text: "Tocca a te. Intervieni." }] }],
       config: {
         systemInstruction: systemPrompt,
-        maxOutputTokens: 200,
       }
     });
 
