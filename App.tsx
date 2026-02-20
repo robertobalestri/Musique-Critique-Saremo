@@ -391,11 +391,12 @@ function App() {
 
     if (!results) return null;
 
-    const personaIds = Object.keys(results) as PersonaId[];
+    // Filter out any IDs that might be in localStorage but no longer exist in code
+    const personaIds = (Object.keys(results) as PersonaId[]).filter(id => PERSONAS[id]);
     const isMultiMode = personaIds.length > 1;
 
     // View specific persona result
-    if (activeResultPersona !== 'ALL' && results[activeResultPersona]) {
+    if (activeResultPersona !== 'ALL' && results[activeResultPersona] && PERSONAS[activeResultPersona]) {
       return (
         <div className="space-y-6">
           {isMultiMode && (

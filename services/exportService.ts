@@ -68,7 +68,8 @@ export const exportToCSV = (
     ];
 
     // 2. Build Data Rows
-    const rows = Object.entries(results).map(([personaId, analysis], index) => {
+    const validResults = Object.entries(results).filter(([id]) => PERSONAS[id as PersonaId]);
+    const rows = validResults.map(([personaId, analysis], index) => {
         const persona = PERSONAS[personaId as PersonaId];
         const lyrical = analysis.lyricalAnalysis;
 

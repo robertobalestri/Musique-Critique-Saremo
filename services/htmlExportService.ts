@@ -10,7 +10,7 @@ export const exportToHTML = (
     fashionCritique: string | null = null,
     averageAestheticScore: number | null = null
 ) => {
-    const personaIds = Object.keys(results) as PersonaId[];
+    const personaIds = (Object.keys(results) as PersonaId[]).filter(id => PERSONAS[id]);
     const musicIds = personaIds.filter(id => PERSONAS[id].type !== 'fashion');
     const fashionIds = personaIds.filter(id => PERSONAS[id].type === 'fashion');
 
