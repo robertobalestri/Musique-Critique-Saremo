@@ -7,9 +7,12 @@ export const exportToHTML = (
     averageScore: number | null,
     metadata: { artistName: string; songTitle: string; isBand: boolean },
     filename: string,
-    fashionCritique: string | null = null
+    fashionCritique: string | null = null,
+    averageAestheticScore: number | null = null
 ) => {
     const personaIds = Object.keys(results) as PersonaId[];
+    const musicIds = personaIds.filter(id => PERSONAS[id].type !== 'fashion');
+    const fashionIds = personaIds.filter(id => PERSONAS[id].type === 'fashion');
 
     // Generate HTML Content
     const htmlContent = `
@@ -319,19 +322,20 @@ export const exportToHTML = (
 
             ${fashionCritique ? `
             <div class="synthesis-card" style="border-color: rgba(236, 72, 153, 0.3); background: linear-gradient(to bottom, #1f1a20, #110e13);">
-                <h3 style="color: #ec4899; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem; margin-bottom: 20px;">Critica Fashion / Look</h3>
+                <h3 style="color: #ec4899; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem; margin-bottom: 20px;">Critica Fashion / Recap</h3>
                 <p class="synthesis-text" style="color: #fce7f3;">${fashionCritique.replace(/\n/g, '<br>')}</p>
             </div>
             ` : ''}
         </div>
 
+        ${musicIds.length > 0 ? `
+        <div style="margin-bottom: 20px;">
+            <h2 style="font-size: 2rem; color: #f1f5f9; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 10px;">Critici Musicali</h2>
+        </div>
         <div class="grid">
-            ${personaIds.map(id => {
+            ${musicIds.map(id => {
         const result = results[id];
         const persona = PERSONAS[id];
-        const color = persona.color.replace('text-', 'color: ').replace('text-gray-200', 'color: #e2e8f0'); // Simple conversion attempt, ideally use hex in constants
-
-        // We embed the full data in a data attribute
         const safeData = JSON.stringify({
             name: persona.name,
             score: result.lyricalAnalysis.finalScore,
@@ -353,9 +357,54 @@ export const exportToHTML = (
                     <p class="summary">"${result.lyricalAnalysis.journalisticSummary}"</p>
                     <div class="click-hint">Clicca per leggere tutto</div>
                 </div>
-              `;
+                `;
     }).join('')}
         </div>
+        ` : ''}
+
+        ${fashionIds.length > 0 ? `
+        <div style="margin-top: 60px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #831843; padding-bottom: 10px; margin-bottom: 20px;">
+                <h2 style="font-size: 2rem; color: #ec4899; margin: 0;">Angolo dello Stile</h2>
+                ${averageAestheticScore !== null ? `
+                <div class="average-score" style="border-color: rgba(236, 72, 153, 0.3); background: rgba(131, 24, 67, 0.2); padding: 10px 20px; font-size: 1.5rem; margin: 0;">
+                    <span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: #f472b6;">Aesthetic Score</span>
+                    <span class="value" style="color: #fce7f3;">${averageAestheticScore}</span>
+                    <span style="color: #db2777; font-size: 1rem;">/100</span>
+                </div>
+                ` : ''}
+            </div>
+            
+            <div class="grid">
+                ${fashionIds.map(id => {
+        const result = results[id];
+        const persona = PERSONAS[id];
+        const safeData = JSON.stringify({
+            name: persona.name,
+            score: result.lyricalAnalysis.finalScore,
+            summary: result.lyricalAnalysis.journalisticSummary,
+            interpretation: result.lyricalAnalysis.interpretation,
+            musicalAnalysis: result.musicalAnalysis,
+            scorecard: result.lyricalAnalysis.scorecard,
+            areas: result.lyricalAnalysis.areasForImprovement
+        }).replace(/"/g, '&quot;');
+
+        return `
+                    <div class="card" style="border-color: rgba(236, 72, 153, 0.2); background-color: rgba(30, 41, 59, 0.8);" onclick="openModal(this)" data-details="${safeData}">
+                        <div class="card-header">
+                            <h3 class="persona-name" style="color: ${getDefaultColor(id)}">${persona.name}</h3>
+                        </div>
+                        <div class="score">
+                            ${result.lyricalAnalysis.finalScore}<span>/100</span>
+                        </div>
+                        <p class="summary">"${result.lyricalAnalysis.journalisticSummary}"</p>
+                        <div class="click-hint" style="color: #ec4899;">Esplora Look</div>
+                    </div>
+                    `;
+    }).join('')}
+            </div>
+        </div>
+        ` : ''}
     </div>
 
     <!-- Modal Template -->

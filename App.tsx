@@ -21,10 +21,10 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   const [audioAnalysisReport, setAudioAnalysisReport] = useState<string | null>(null);
-  // BETTER: Switch to fashionCritiques.
-  const [fashionCritiques, setFashionCritiques] = useState<Record<string, string> | null>(null);
+  // BETTER: Switch to fashionCritiques. -> REMOVED
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [averageScore, setAverageScore] = useState<number | null>(null);
+  const [averageAestheticScore, setAverageAestheticScore] = useState<number | null>(null); // NEW
   const [metadata, setMetadata] = useState({ artistName: '', songTitle: '', isBand: false });
 
   // State to toggle between single result view (if multiple exist)
@@ -67,9 +67,9 @@ function App() {
         const parsed = JSON.parse(savedState);
         if (parsed.results) setResults(parsed.results);
         if (parsed.audioAnalysisReport) setAudioAnalysisReport(parsed.audioAnalysisReport);
-        if (parsed.fashionCritiques) setFashionCritiques(parsed.fashionCritiques);
         if (parsed.synthesis) setSynthesis(parsed.synthesis);
         if (parsed.averageScore) setAverageScore(parsed.averageScore);
+        if (parsed.averageAestheticScore) setAverageAestheticScore(parsed.averageAestheticScore);
         if (parsed.metadata) setMetadata(parsed.metadata);
         if (parsed.lastAnalysisRequest) setLastAnalysisRequest(parsed.lastAnalysisRequest);
         // Backward compatibility check for array vs object
@@ -100,15 +100,15 @@ function App() {
     const stateToSave = {
       results,
       audioAnalysisReport,
-      fashionCritiques,
       synthesis,
       averageScore,
+      averageAestheticScore,
       metadata,
       lastAnalysisRequest,
       discussionMessages
     };
     localStorage.setItem('saremo_analysis_state', JSON.stringify(stateToSave));
-  }, [results, audioAnalysisReport, fashionCritiques, synthesis, averageScore, metadata, lastAnalysisRequest, discussionMessages, isInitialized]);
+  }, [results, audioAnalysisReport, synthesis, averageScore, averageAestheticScore, metadata, lastAnalysisRequest, discussionMessages, isInitialized]);
 
   const handleAnalyze = async (
     audio: File | undefined,
@@ -124,72 +124,65 @@ function App() {
     setError(null);
     setResults(null);
     setAudioAnalysisReport(null);
-    setFashionCritiques(null);
     setMetadata({ artistName, songTitle, isBand });
 
     try {
-      // 0. Analyze Fashion (if images present)
+      const newResults: Record<string, AnalysisResponse> = {};
       let fashionContextResult = "";
-      if (images && images.length > 0) {
-        try {
-          const fashionPersonas = Object.values(PERSONAS).filter(p => p.type === 'fashion');
-          const fashionResultsMap: Record<string, string> = {};
-
-          // Run all fashion analyses in parallel
-          const fashionPromises = fashionPersonas.map(async (p) => {
-            try {
-              const critique = await analyzeFashion(images, p.id, bio, artistName);
-              return { id: p.id, name: p.name, critique };
-            } catch (e) {
-              console.warn(`Fashion analysis failed for ${p.name}`, e);
-              return null;
-            }
-          });
-
-          const fashionResults = await Promise.all(fashionPromises);
-
-          fashionResults.forEach(res => {
-            if (res) {
-              fashionResultsMap[res.id] = res.critique;
-              fashionContextResult += `${res.name}: "${res.critique}"\n\n`;
-            }
-          });
-
-          if (Object.keys(fashionResultsMap).length > 0) {
-            setFashionCritiques(fashionResultsMap);
-          }
-
-        } catch (e) {
-          console.warn("Fashion analysis failed", e);
-        }
-      }
-
-      // 1. Extract Audio Features
-      let audioContextReport = "Analisi solo testuale (Audio non fornito).";
-      if (audio) {
-        try {
-          audioContextReport = await extractAudioFeatures(audio);
-        } catch (e) {
-          console.warn("Audio analysis context failed", e);
-          audioContextReport = "Analisi tecnica fallita.";
-        }
-      }
-
-      const safeAudio = audio || undefined; // Ensure undefined if null
-
-      // Save context for chat
-      setLastAnalysisRequest({
-        artist: artistName,
-        title: songTitle,
-        lyrics,
-        bio,
-        fashionCritique: fashionContextResult || undefined
-      });
 
       if (analyzeAll) {
-        // Parallel requests
-        const musicPersonas = Object.values(PERSONAS).filter(p => !p.type || p.type === 'music');
+        // 0. Analyze Fashion FIRST to build context for music critics
+        if (images && images.length > 0) {
+          try {
+            const fashionPersonas = Object.values(PERSONAS).filter(p => p.type === 'fashion');
+            const fashionPromises = fashionPersonas.map(async (p) => {
+              try {
+                const critique = await analyzeFashion(images, p.id, bio, artistName);
+                return { id: p.id, name: p.name, critique };
+              } catch (e) {
+                console.warn(`Fashion analysis failed for ${p.name}`, e);
+                return null;
+              }
+            });
 
+            const fashionResults = await Promise.all(fashionPromises);
+
+            fashionResults.forEach(res => {
+              if (res) {
+                newResults[res.id] = res.critique;
+                // Build simple summary for music context
+                fashionContextResult += `${res.name} (Voto ${res.critique.lyricalAnalysis.finalScore}/100): "${res.critique.lyricalAnalysis.journalisticSummary}"\n\n`;
+              }
+            });
+          } catch (e) {
+            console.warn("Fashion analysis failed", e);
+          }
+        }
+
+        // 1. Extract Audio Features
+        let audioContextReport = "Analisi solo testuale (Audio non fornito).";
+        if (audio) {
+          try {
+            audioContextReport = await extractAudioFeatures(audio);
+          } catch (e) {
+            console.warn("Audio analysis context failed", e);
+            audioContextReport = "Analisi tecnica fallita.";
+          }
+        }
+
+        const safeAudio = audio || undefined; // Ensure undefined if null
+
+        // Save context for chat
+        setLastAnalysisRequest({
+          artist: artistName,
+          title: songTitle,
+          lyrics,
+          bio,
+          fashionCritique: fashionContextResult || undefined
+        });
+
+        // 2. Music Analysis
+        const musicPersonas = Object.values(PERSONAS).filter(p => !p.type || p.type === 'music');
         const promises = musicPersonas.map(persona => {
           return analyzeSong(safeAudio, bio, persona.id, audioContextReport, lyrics, artistName, songTitle, isBand, fashionContextResult || undefined)
             .then(res => ({ id: persona.id, data: res }))
@@ -201,9 +194,7 @@ function App() {
 
         const responses = await Promise.all(promises);
 
-        const newResults: Record<string, AnalysisResponse> = {};
         let successCount = 0;
-
         responses.forEach(r => {
           if (r) {
             newResults[r.id] = r.data;
@@ -211,26 +202,61 @@ function App() {
           }
         });
 
-        if (successCount === 0) throw new Error("Tutte le analisi sono fallite.");
+        if (successCount === 0 && Object.keys(newResults).length === 0) {
+          throw new Error("Tutte le analisi sono fallite.");
+        }
 
-        // Calculate Average Score
-        const scores = Object.values(newResults).map(r => r.lyricalAnalysis.finalScore);
-        const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-        setAverageScore(Math.round(avg * 10) / 10); // Round to 1 decimal
+        // Calculate Average Scores separately
+        const musicScores = Object.entries(newResults)
+          .filter(([id]) => PERSONAS[id].type !== 'fashion')
+          .map(([_, r]) => r.lyricalAnalysis.finalScore);
+        if (musicScores.length > 0) {
+          const avg = musicScores.reduce((a, b) => a + b, 0) / musicScores.length;
+          setAverageScore(Math.round(avg * 10) / 10);
+        } else {
+          setAverageScore(null);
+        }
+
+        const fashionScores = Object.entries(newResults)
+          .filter(([id]) => PERSONAS[id].type === 'fashion')
+          .map(([_, r]) => r.lyricalAnalysis.finalScore);
+        if (fashionScores.length > 0) {
+          const avgF = fashionScores.reduce((a, b) => a + b, 0) / fashionScores.length;
+          setAverageAestheticScore(Math.round(avgF * 10) / 10);
+        } else {
+          setAverageAestheticScore(null);
+        }
 
         setResults(newResults);
         setActiveResultPersona('ALL');
         setViewMode('HOME');
 
-        // Trigger Editor Synthesis
+        // Trigger Editor Synthesis using all results
         setIsSynthesizing(true);
         synthesizeReviews(newResults)
           .then(text => setSynthesis(text))
           .finally(() => setIsSynthesizing(false));
 
       } else {
-        // Single request
-        const response = await analyzeSong(safeAudio, bio, selectedPersona, audioContextReport, lyrics, artistName, songTitle, isBand, fashionContextResult || undefined);
+        // Single request (Handle properly if fashion or music)
+        const persona = PERSONAS[selectedPersona];
+        let response: AnalysisResponse;
+
+        if (persona.type === 'fashion') {
+          response = await analyzeFashion(images, selectedPersona, bio, artistName);
+        } else {
+          // 1. Extract Audio Features
+          let audioContextReport = "Analisi solo testuale (Audio non fornito).";
+          if (audio) {
+            try {
+              audioContextReport = await extractAudioFeatures(audio);
+            } catch (e) {
+              audioContextReport = "Analisi tecnica fallita.";
+            }
+          }
+          response = await analyzeSong(audio || undefined, bio, selectedPersona, audioContextReport, lyrics, artistName, songTitle, isBand, undefined);
+        }
+
         setResults({ [selectedPersona]: response });
         setActiveResultPersona(selectedPersona);
         setViewMode('SINGLE');
@@ -252,7 +278,6 @@ function App() {
     setError(null);
     setResults(null);
     setAudioAnalysisReport(null);
-    setFashionCritiques(null);
 
     try {
       const report = await extractAudioFeatures(audio);
@@ -268,10 +293,10 @@ function App() {
   const resetAnalysis = () => {
     setResults(null);
     setAudioAnalysisReport(null);
-    setFashionCritiques(null);
     setSynthesis(null);
     setIsSynthesizing(false);
     setAverageScore(null);
+    setAverageAestheticScore(null);
     setError(null);
     setActiveResultPersona('ALL');
     setDiscussionMessages({ music: [], fashion: [], all: [] }); // Reset all histories
@@ -399,12 +424,15 @@ function App() {
             result={results[activeResultPersona]}
             personaId={activeResultPersona as PersonaId}
             metadata={metadata}
-            fashionCritique={fashionCritiques ? Object.values(fashionCritiques).join("\n\n") : undefined}
+            fashionCritique={lastAnalysisRequest?.fashionCritique}
             onReset={resetAnalysis}
           />
         </div>
       );
     }
+
+    const musicIds = personaIds.filter(id => PERSONAS[id].type !== 'fashion');
+    const fashionIds = personaIds.filter(id => PERSONAS[id].type === 'fashion');
 
     // View 'Dashboard' for multiple results
     return (
@@ -418,7 +446,7 @@ function App() {
 
           {averageScore !== null && (
             <div className="inline-flex items-center gap-3 bg-gray-800/50 border border-gray-700 px-6 py-3 rounded-full backdrop-blur-sm">
-              <span className="text-gray-400 uppercase text-xs font-bold tracking-widest">Media Critica</span>
+              <span className="text-gray-400 uppercase text-xs font-bold tracking-widest">Media Critica Musicale</span>
               <div className="text-3xl font-black text-white">{averageScore}</div>
               <span className="text-gray-500 text-sm">/100</span>
             </div>
@@ -447,58 +475,76 @@ function App() {
           )}
         </div>
 
-        {/* Fashion Critique Card */}
-        {/* Fashion Critic Section (Dynamic) */}
-        {fashionCritiques && Object.entries(fashionCritiques).map(([id, critique]) => {
-          const persona = PERSONAS[id];
-          return (
-            <div key={id} className={`max-w-4xl mx-auto -mt-6 mb-8 bg-gray-900 border rounded-2xl p-6 shadow-2xl relative overflow-hidden animate-in slide-in-from-top-4 duration-700 ${id === 'fashion_critic' ? 'border-pink-500/30' : 'border-orange-500/30'}`}>
-              <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12">
-                <Scissors size={100} className={id === 'fashion_critic' ? "text-pink-500" : "text-orange-500"} />
-              </div>
-              <div className="flex items-start gap-4 relative z-10">
-                <div className={`p-3 rounded-full border ${id === 'fashion_critic' ? 'bg-pink-900/40 border-pink-500/30' : 'bg-orange-900/40 border-orange-500/30'}`}>
-                  <Scissors className={id === 'fashion_critic' ? "text-pink-400" : "text-orange-400"} size={32} />
-                </div>
-                <div>
-                  <h3 className={`text-xl font-bold ${id === 'fashion_critic' ? 'text-pink-400' : 'text-orange-400'} mb-1`}>{persona.name}</h3>
-                  <p className="text-xs text-gray-400 mb-4 uppercase tracking-widest">{persona.subtitle}</p>
-                  <div className="prose prose-invert max-w-none">
-                    <p className="text-gray-200 italic leading-relaxed text-lg">
-                      "{critique}"
-                    </p>
+        {/* Music Critics Grid */}
+        {musicIds.length > 0 && (
+          <div className="space-y-6">
+            <h3 className="text-2xl font-bold text-white border-b border-gray-800 pb-2">Critici Musicali</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              {musicIds.map(id => {
+                const result = results[id];
+                const persona = PERSONAS[id];
+                return (
+                  <div
+                    key={id}
+                    onClick={() => setActiveResultPersona(id)}
+                    className="bg-dark-surface border border-gray-800 rounded-xl p-6 hover:border-gray-500 cursor-pointer transition-all hover:-translate-y-1 shadow-lg group relative overflow-hidden"
+                  >
+                    <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${persona.color.replace('text-', 'bg-')}`}></div>
+                    <h3 className={`font-bold text-lg mb-2 ${persona.color}`}>{persona.name}</h3>
+                    <div className="text-4xl font-bold text-white mb-2">
+                      {result.lyricalAnalysis.finalScore}
+                      <span className="text-sm text-gray-500 font-normal">/100</span>
+                    </div>
+                    <p className="text-xs text-gray-400 italic">"{result.lyricalAnalysis.journalisticSummary}"</p>
+                    <div className="mt-4 text-xs font-mono text-gray-600 group-hover:text-gray-300">Clicca per dettagli</div>
                   </div>
-                </div>
-              </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        )}
 
-        {/* Grid of Mini Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-          {personaIds.map(id => {
-            const result = results[id];
-            const persona = PERSONAS[id];
-            return (
-              <div
-                key={id}
-                onClick={() => setActiveResultPersona(id)}
-                className="bg-dark-surface border border-gray-800 rounded-xl p-6 hover:border-gray-500 cursor-pointer transition-all hover:-translate-y-1 shadow-lg group relative overflow-hidden"
-              >
-                <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${persona.color.replace('text-', 'bg-')}`}></div>
-                <h3 className={`font-bold text-lg mb-2 ${persona.color}`}>{persona.name}</h3>
-                <div className="text-4xl font-bold text-white mb-2">
-                  {result.lyricalAnalysis.finalScore}
-                  <span className="text-sm text-gray-500 font-normal">/100</span>
-                </div>
-                <p className="text-xs text-gray-400 italic">"{result.lyricalAnalysis.journalisticSummary}"</p>
-                <div className="mt-4 text-xs font-mono text-gray-600 group-hover:text-gray-300">Clicca per dettagli</div>
+        {/* Fashion Critics Grid */}
+        {fashionIds.length > 0 && (
+          <div className="space-y-6 mt-12 bg-gray-900/40 p-6 rounded-2xl border border-pink-900/30">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-4">
+              <div className="flex items-center gap-3">
+                <Scissors className="text-pink-500" size={28} />
+                <h3 className="text-2xl font-bold text-pink-100">Angolo dello Stile</h3>
               </div>
-            );
-          })}
-        </div>
+              {averageAestheticScore !== null && (
+                <div className="inline-flex items-center gap-2 bg-pink-900/20 border border-pink-900/50 px-4 py-2 rounded-full">
+                  <span className="text-pink-400 uppercase text-xs font-bold tracking-wider">Aesthetic Score</span>
+                  <div className="text-xl font-black text-pink-100">{averageAestheticScore}</div>
+                  <span className="text-pink-500/70 text-sm">/100</span>
+                </div>
+              )}
+            </div>
 
-        {/* The Discussion Component - REMOVED, using Sidebar now */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              {fashionIds.map(id => {
+                const result = results[id];
+                const persona = PERSONAS[id];
+                return (
+                  <div
+                    key={id}
+                    onClick={() => setActiveResultPersona(id)}
+                    className="bg-gray-800/50 border border-gray-700 rounded-xl p-6 hover:border-pink-500/50 cursor-pointer transition-all hover:-translate-y-1 shadow-lg group relative overflow-hidden backdrop-blur-sm"
+                  >
+                    <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${persona.color.replace('text-', 'bg-')}`}></div>
+                    <h3 className={`font-bold text-lg mb-2 ${persona.color}`}>{persona.name}</h3>
+                    <div className="text-4xl font-bold text-white mb-2">
+                      {result.lyricalAnalysis.finalScore}
+                      <span className="text-sm text-gray-500 font-normal">/100</span>
+                    </div>
+                    <p className="text-xs text-gray-400 italic">"{result.lyricalAnalysis.journalisticSummary}"</p>
+                    <div className="mt-4 text-xs font-mono text-pink-900 group-hover:text-pink-400 transition-colors">Esplora Look</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-center gap-4 mt-12">
           <button
@@ -515,7 +561,8 @@ function App() {
               averageScore,
               metadata,
               getSafeFilename('csv'),
-              fashionCritiques ? Object.entries(fashionCritiques).map(([id, text]) => `${PERSONAS[id].name}: ${text}`).join("\n\n") : undefined
+              lastAnalysisRequest?.fashionCritique,
+              averageAestheticScore
             )}
             className="px-6 py-3 bg-gray-800 text-white rounded-full hover:bg-gray-700 transition-colors flex items-center gap-2"
           >
@@ -529,7 +576,8 @@ function App() {
               averageScore,
               metadata,
               getSafeFilename('html'),
-              fashionCritiques ? Object.entries(fashionCritiques).map(([id, text]) => `<strong>${PERSONAS[id].name}</strong>: ${text}`).join("\n\n") : undefined
+              lastAnalysisRequest?.fashionCritique,
+              averageAestheticScore
             )}
             className="px-6 py-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 transition-colors flex items-center gap-2 shadow-lg shadow-indigo-500/20"
           >

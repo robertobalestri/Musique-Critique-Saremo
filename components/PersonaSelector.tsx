@@ -1,7 +1,7 @@
 import React from 'react';
 import { PERSONAS } from '../constants';
 import { PersonaId } from '../types';
-import { BookOpen, Frown, Sparkles, Zap, Skull, CheckCircle, Scroll, Mic2, Moon, Star, Cpu, Smartphone, Radio } from 'lucide-react';
+import { BookOpen, Frown, Sparkles, Zap, Skull, CheckCircle, Scroll, Mic2, Moon, Star, Cpu, Smartphone, Radio, Clock, User, Scissors, Crown } from 'lucide-react';
 
 interface PersonaSelectorProps {
   selectedPersona: PersonaId;
@@ -20,7 +20,11 @@ const IconMap = {
   Star,     // Pop
   Cpu,      // Techno
   Smartphone, // Teen
-  Radio     // Oldies
+  Radio,    // Oldies
+  Clock,    // Valeria Vintage
+  User,     // Carlo Qualunque
+  Scissors, // Celestino Svolazzetti
+  Crown     // Donna Olimpia
 };
 
 const PersonaSelector: React.FC<PersonaSelectorProps> = ({ selectedPersona, onSelect }) => {

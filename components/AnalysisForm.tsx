@@ -56,7 +56,7 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const newImages = Array.from(e.target.files).filter(file => file.type.startsWith('image/'));
+      const newImages = (Array.from(e.target.files) as File[]).filter(file => file.type.startsWith('image/'));
       setImages(prev => [...prev, ...newImages]);
     }
   };
@@ -68,7 +68,7 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files) {
-      const droppedFiles = Array.from(e.dataTransfer.files);
+      const droppedFiles = Array.from(e.dataTransfer.files) as File[];
       const audio = droppedFiles.find(f => f.type.startsWith('audio/'));
       const droppedImages = droppedFiles.filter(f => f.type.startsWith('image/'));
 

@@ -7,12 +7,14 @@ export const exportToCSV = (
     averageScore: number | null,
     metadata: { artistName: string; songTitle: string; isBand: boolean },
     filename: string = 'analisi_musicale.csv',
-    fashionCritique: string | null = null
+    fashionCritique: string | null = null,
+    averageAestheticScore: number | null = null
 ) => {
     if (!results) return;
 
     // List of standard categories to ensure column order
     const standardCategories = [
+        // Music
         'Tema e Concetto',
         'Immaginario e Linguaggio',
         'Narrativa e Struttura',
@@ -22,11 +24,23 @@ export const exportToCSV = (
         'Rima e Tecnica Poetica',
         'Originalità e Rischio',
         'Coesione ed Economia',
-        'Memorabilità e Hook'
+        'Memorabilità e Hook',
+        // Fashion
+        'Coerenza Estetica',
+        'Fit & Comodità Apparente',
+        'Accessori & Dettagli Pratici',
+        'Trucco e Parrucco (Grooming)',
+        'Scelta dei Colori',
+        'Vibes & Atteggiamento',
+        'Allure & Portamento',
+        'Originalità & Audacia',
+        'Haute Couture & Taglio sartoriale',
+        'Armocromia & Palette',
+        'Estetica dei Dettagli',
+        'Beauty & Grooming'
     ];
 
     // Helper to map incoming category names to standard ones if needed
-    // (Currently assuming exact matches or partial matches)
     const normalizeCategory = (cat: string) => {
         return standardCategories.find(sc => cat.includes(sc)) || cat;
     };
@@ -37,11 +51,13 @@ export const exportToCSV = (
         'ID',
         'Artista',
         'Brano',
-        'Media Critica',
+        'Media Critica Musicale',
+        'Aesthetic Score (Media Stile)',
         'Verdetto Editoriale (Caporedattore)',
-        'Critica Fashion', // Updated header
+        'Critica Fashion Recap',
         'Critico',
-        'Voto Finale / 100', // ...
+        'Tipo Critico',
+        'Voto Finale / 100',
         'Sintesi Giornalistica',
         'Interpretazione Estesa',
         'Analisi Musicale',
@@ -78,12 +94,14 @@ export const exportToCSV = (
             if (header === 'ID') return index + 1;
             if (header === 'Artista') return q(metadata.artistName);
             if (header === 'Brano') return q(metadata.songTitle);
-            if (header === 'Media Critica') return averageScore !== null ? averageScore : '""';
+            if (header === 'Media Critica Musicale') return averageScore !== null ? averageScore : '""';
+            if (header === 'Aesthetic Score (Media Stile)') return averageAestheticScore !== null ? averageAestheticScore : '""';
             if (header === 'Verdetto Editoriale (Caporedattore)') return q(synthesis);
-            if (header === 'Critica Fashion') return q(fashionCritique); // Updated map
+            if (header === 'Critica Fashion Recap') return q(fashionCritique);
 
             // -- Critic Data --
             if (header === 'Critico') return q(persona.name);
+            if (header === 'Tipo Critico') return q(persona.type || 'music');
             if (header === 'Voto Finale / 100') return lyrical.finalScore;
             if (header === 'Sintesi Giornalistica') return q(lyrical.journalisticSummary);
             if (header === 'Interpretazione Estesa') return q(lyrical.interpretation);

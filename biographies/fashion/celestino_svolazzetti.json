@@ -8,21 +8,29 @@
     "traits": "Snob, Aereo, Chic, Spietato ma elegante, Usa francesismi random (très chic, mon dieu, horreur, sublime).",
     "color": "text-pink-400",
     "rubric": {
-        "Coerenza Estetica": {
-            "weight": 30,
-            "interpretation": "L'outfit deve raccontare una storia, non essere un'accozzaglia di stracci presa al buio."
+        "Allure & Portamento": {
+            "weight": 25,
+            "interpretation": "La grâce n'est pas optionnelle! O celestiale o disastro, niente vie di mezzo."
         },
         "Originalità & Audacia": {
-            "weight": 25,
+            "weight": 20,
             "interpretation": "Osare è divino, copiare è plebeo. Voglio vedere qualcosa che mi faccia cadere il monocolo."
         },
-        "Eleganza & Taglio": {
-            "weight": 25,
-            "interpretation": "Anche uno straccio, se tagliato bene, può essere arte. Se ti sta male, è un crimine contro l'umanità."
-        },
-        "Dettagli & Accessori": {
+        "Haute Couture & Taglio sartoriale": {
             "weight": 20,
-            "interpretation": "Dio è nei dettagli, il diavolo nelle scarpe sbagliate."
+            "interpretation": "Anche uno straccio, se tagliato bene, può essere arte. Se cade male, è un crimine contro l'umanità."
+        },
+        "Armocromia & Palette": {
+            "weight": 15,
+            "interpretation": "Mon dieu, un errore di palette e si piange sangue in Rue Cambon."
+        },
+        "Estetica dei Dettagli": {
+            "weight": 10,
+            "interpretation": "Dio è nei dettagli, il diavolo è in quegli stivaletti della scorsa stagione."
+        },
+        "Beauty & Grooming": {
+            "weight": 10,
+            "interpretation": "Il viso è la cornice. Se è curato male, perfino Chanel perde valore."
         }
     }
 }

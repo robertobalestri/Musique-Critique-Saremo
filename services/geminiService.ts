@@ -42,30 +42,86 @@ export const analyzeFashion = async (
   personaId: PersonaId,
   bio: string,
   artistName?: string
-): Promise<string> => {
+): Promise<AnalysisResponse> => {
   const ai = getModel();
-  const critic = PERSONAS[personaId];
-  if (!critic) throw new Error(`Critico fashion non trovato: ${personaId}`);
+  const persona = PERSONAS[personaId];
+  if (!persona) throw new Error(`Critico fashion non trovato: ${personaId}`);
+
+  /* Generiamo dinamicamente la sezione della rubrica basata sul JSON del critico */
+  const rubricList = Object.entries(persona.rubric)
+    .filter(([_, details]) => details.weight > 0)
+    .map(([category, details]) => {
+      const definition = RUBRIC_DEFINITIONS[category] || "Definizione estetica standard";
+      return `    * **${category} (${details.weight} pti):**\n       - Concetto: ${definition}\n       - Lente Critica (${persona.name}): ${details.interpretation}`;
+    })
+    .join('\n');
 
   const systemInstruction = `
-    Sei ${critic.name}.
-    ${critic.traits}
+    Sei ${persona.name}.
+    ${persona.traits}
     
     Il tuo compito è giudicare L'OUTFIT, IL LOOK e LO STILE dell'artista basandoti sulle immagini fornite.
     Non ti interessa la musica per ora, solo l'apparire.
     
-    OUTPUT RICHIESTO:
-    Un breve paragrafo (max 500 caratteri) di critica stilistica.
+    Il tuo output DEVE essere un singolo oggetto JSON valido conforme allo schema fornito.
 
-    Restituisci testo puro, senza formattazione markdown o simili.
+    **Principi Fondamentali & Direttive:**
+    1. **Obiettività Estetica (con Carattere):** Analisi basata sull'impatto visivo, ma col tono della tua "Persona".
+    2. **Punteggio Calibrato:** Assegna i punti per ogni categoria con onestà e severità.
+    3. **Sintesi Giornalistica:** Genera un breve riassunto ("voto + motivo") stile commento da red carpet o rivista di moda.
+
+    **RUBRICA DI CRITICA FASHION (I PESI SONO SPECIFICI PER TE):**
+    ${rubricList}
+
+    Restituisci testo puro, senza formattazione markdown o simili. 
+    Il calcolo del punteggio finale viene fatto in automatico: non scrivere il punteggio finale in nessuno dei tuoi commenti.
   `;
+
+  const responseSchema: Schema = {
+    type: Type.OBJECT,
+    properties: {
+      musicalAnalysis: {
+        type: Type.STRING,
+        description: "Lascia vuoto o scrivi 'Non applicabile a critica visiva.'",
+        nullable: true
+      },
+      lyricalAnalysis: { // We reuse the LyricalAnalysis structure for Fashion to keep types compatible
+        type: Type.OBJECT,
+        properties: {
+          scorecard: {
+            type: Type.ARRAY,
+            description: "Un array contenente il punteggio e la giustificazione per ogni categoria fashion.",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                category: { type: Type.STRING, description: "Il nome della categoria di valutazione." },
+                score: { type: Type.NUMBER, description: "Il punteggio assegnato per questa categoria." },
+                maxScore: { type: Type.NUMBER, description: "Il punteggio massimo possibile per questa categoria." },
+                justification: { type: Type.STRING, description: "Giustificazione dettagliata e caustica se necessario." }
+              },
+              required: ["category", "score", "maxScore", "justification"]
+            }
+          },
+          penalties: { type: Type.NUMBER, description: "Punti dedotti per cadute di stile imperdonabili (0 se nessuna)." },
+          journalisticSummary: { type: Type.STRING, description: "Una sintesi folgorante in 2 frasi sul look, stile commento spietato o esaltato." },
+          interpretation: { type: Type.STRING, description: "Il testo di recensione completo sul loro stile." },
+          areasForImprovement: {
+            type: Type.STRING,
+            description: "Lista puntata di suggerimenti su come migliorare il look o cosa non indossare MAI PIÙ."
+          }
+        },
+        required: ["scorecard", "penalties", "journalisticSummary", "interpretation", "areasForImprovement"]
+      }
+    },
+    required: ["lyricalAnalysis"]
+  };
 
   const userPrompt = `
     Analizza il look di questo artista.
     ${artistName ? `Artista: ${artistName}` : ""}
-    ${bio ? `Bio: ${bio}` : ""}
+    ${bio ? `Bio descrittiva o contesto: ${bio}` : ""}
     
-    Cosa ne pensi del loro stile? È coerente? È chic? È orribile?
+    Cosa ne pensi del loro stile visivo basandoti sulle immagini?
   `;
 
   // Convert images to base64
@@ -93,13 +149,42 @@ export const analyzeFashion = async (
       },
       config: {
         systemInstruction: systemInstruction,
+        responseMimeType: 'application/json',
+        responseSchema: responseSchema,
       }
     });
 
-    return response.text || `${critic.name} si rifiuta di commentare (Nessuna risposta).`;
+    const responseText = response.text;
+    if (!responseText) throw new Error("Nessuna risposta dal modello");
+
+    const rawResponse = JSON.parse(responseText);
+    const fashionCritique = rawResponse.lyricalAnalysis;
+
+    // Sanitize scorecard: Remove 0-weight categories and unknown categories
+    fashionCritique.scorecard = fashionCritique.scorecard.filter((item: any) => {
+      const rubricDetails = persona.rubric[item.category];
+      return rubricDetails && rubricDetails.weight > 0;
+    });
+
+    const subtotal = fashionCritique.scorecard.reduce((acc: number, item: any) => acc + item.score, 0);
+    const penalties = fashionCritique.penalties || 0;
+    const finalScore = Math.max(0, Math.min(100, subtotal - penalties));
+
+    const fullResponse: AnalysisResponse = {
+      ...rawResponse,
+      lyricalAnalysis: {
+        ...fashionCritique,
+        subtotal,
+        finalScore,
+        scoreLowerBound: 0,
+        scoreUpperBound: 100
+      }
+    };
+
+    return fullResponse;
   } catch (error) {
-    console.error(`Errore analisi fashion (${critic.name}):`, error);
-    return `${critic.name} è confuso (Errore tecnico).`;
+    console.error(`Errore analisi fashion (${persona.name}):`, error);
+    throw error;
   }
 };
 

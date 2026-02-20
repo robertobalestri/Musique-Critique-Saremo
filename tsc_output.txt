@@ -1,0 +1,5 @@
+components/AnalysisForm.tsx(59,72): error TS2339: Property 'type' does not exist on type 'unknown'.
+components/AnalysisForm.tsx(72,46): error TS2339: Property 'type' does not exist on type 'unknown'.
+components/AnalysisForm.tsx(73,56): error TS2339: Property 'type' does not exist on type 'unknown'.
+components/AnalysisForm.tsx(75,52): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'File'.
+  Type '{}' is missing the following properties from type 'File': lastModified, name, webkitRelativePath, size, and 6 more.
