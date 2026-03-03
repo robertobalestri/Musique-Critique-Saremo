@@ -2,24 +2,39 @@ import React from 'react';
 import { PERSONAS } from '../constants';
 import { PersonaId } from '../types';
 import * as Icons from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { NavLink } from 'react-router-dom';
 
 interface SidebarProps {
     onSelectCritic: (id: PersonaId) => void;
     selectedCriticId?: PersonaId | null; // Optional highlighting
     onNewAnalysis: () => void;
+    onShowHistory: () => void;
+    onOpenAuth: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onSelectCritic, selectedCriticId, onNewAnalysis }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onSelectCritic, selectedCriticId, onNewAnalysis, onShowHistory, onOpenAuth }) => {
+    const { user, logout } = useAuth();
+
     return (
         <aside className="w-full md:w-64 bg-dark-surface border-r border-gray-800 flex flex-col h-full overflow-y-auto">
             <div className="p-6 border-b border-gray-800 space-y-4">
-                <button
+                <NavLink
+                    to="/"
                     onClick={onNewAnalysis}
-                    className="w-full py-2 px-4 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg flex items-center justify-center gap-2 transition-colors border border-gray-700 text-sm font-bold"
+                    className={({ isActive }) => `w-full py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors border text-sm font-bold ${isActive ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'}`}
                 >
                     <Icons.RotateCcw size={16} />
                     Nuova Analisi
-                </button>
+                </NavLink>
+                <NavLink
+                    to="/history"
+                    onClick={onShowHistory}
+                    className={({ isActive }) => `w-full py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors border text-sm font-bold ${isActive ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-indigo-900/40 hover:bg-indigo-900/60 text-indigo-300 border-indigo-900/50'}`}
+                >
+                    <Icons.History size={16} />
+                    Archivio Analisi
+                </NavLink>
                 <div>
                     <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
                         I Nostri Critici
@@ -106,8 +121,30 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectCritic, selectedCriticId, onN
                 </div>
             </nav>
 
-            <div className="p-4 border-t border-gray-800 text-center">
-                <p className="text-xs text-gray-600">© 2024 Saremo</p>
+            <div className="p-4 border-t border-gray-800 flex flex-col items-center gap-3">
+                {user ? (
+                    <div className="flex flex-col items-center gap-2 w-full">
+                        <div className="flex items-center gap-2 text-sm text-gray-300">
+                            <Icons.User size={14} className="text-indigo-400" />
+                            <span>{user.username}</span>
+                        </div>
+                        <button
+                            onClick={logout}
+                            className="w-full py-1.5 px-3 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-md transition-colors text-xs font-medium"
+                        >
+                            Logout
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        onClick={onOpenAuth}
+                        className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/20"
+                    >
+                        <Icons.LogIn size={16} />
+                        Accedi
+                    </button>
+                )}
+                <p className="text-xs text-gray-600 mt-2">© 2024 Saremo</p>
             </div>
         </aside>
     );

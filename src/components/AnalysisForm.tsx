@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { Upload, FileText, Music, Users, X, Activity, AlignLeft, CheckCircle2, Image as ImageIcon, Camera } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'sonner';
 
 interface AnalysisFormProps {
-  onAnalyze: (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string, artistName: string, songTitle: string, isBand: boolean) => void;
+  onAnalyze: (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string, artistName: string, songTitle: string, isBand: boolean, images: File[], tag: string) => void;
   onAudioAnalysis: (audio: File) => void;
   isLoading: boolean;
   allowSingle?: boolean;
@@ -25,6 +27,7 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
   const [artistName, setArtistName] = useState('');
   const [songTitle, setSongTitle] = useState('');
   const [isBand, setIsBand] = useState(false);
+  const [tag, setTag] = useState('');
   const [images, setImages] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -32,7 +35,7 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
   const validateAndSetFile = (file: File) => {
     // 100MB limit
     if (file.size > 100 * 1024 * 1024) {
-      alert('Il file è troppo grande (Max 100MB). Prova a comprimerlo o usa un file più corto.');
+      toast.error('Il file è troppo grande (Max 100MB). Prova a comprimerlo o usa un file più corto.');
       return;
     }
 
@@ -44,7 +47,7 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
     if (hasAudioType || hasValidExtension) {
       setAudioFile(file);
     } else {
-      alert('Per favore carica un file audio valido (MP3, WAV, M4A, ecc).');
+      toast.error('Per favore carica un file audio valido (MP3, WAV, M4A, ecc).');
     }
   };
 
@@ -79,31 +82,33 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent, analyzeAll: boolean) => {
     e.preventDefault();
+    console.log(`[AnalysisForm] handleSubmit called. tag is: "${tag}"`);
 
     if (isTextOnly) {
       if (!lyrics.trim()) {
-        alert("Inserisci il testo per l'analisi testuale.");
+        toast.warning("Inserisci il testo per l'analisi testuale.");
         return;
       }
-      onAnalyze(undefined, bio, analyzeAll, lyrics, artistName, songTitle, isBand, images);
+      onAnalyze(undefined, bio, analyzeAll, lyrics, artistName, songTitle, isBand, images, tag);
     } else {
       if (!audioFile) {
-        alert("Carica un file audio.");
+        toast.warning("Carica un file audio.");
         return;
       }
-      onAnalyze(audioFile, bio, analyzeAll, lyrics, artistName, songTitle, isBand, images);
+      onAnalyze(audioFile, bio, analyzeAll, lyrics, artistName, songTitle, isBand, images, tag);
     }
   };
 
+  const { user } = useAuth();
   const [password, setPassword] = useState('');
-  const REQUIRED_PASSWORD = process.env.PASSWORD;
-  const isPasswordCorrect = !REQUIRED_PASSWORD || password === REQUIRED_PASSWORD;
+  const REQUIRED_PASSWORD = process.env.PASSWORD || import.meta.env?.VITE_PASSWORD;
+  const isPasswordCorrect = !!user || !REQUIRED_PASSWORD || password === REQUIRED_PASSWORD;
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
 
       {/* Password Protection (Only if configured) */}
-      {REQUIRED_PASSWORD && (
+      {REQUIRED_PASSWORD && !user && (
         <div className="bg-red-900/20 border border-red-900/50 rounded-xl p-4 flex items-center gap-4">
           <div className="p-2 bg-red-900/30 rounded-lg">
             <div className="text-red-400 font-bold text-xl">🔒</div>
@@ -276,8 +281,8 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
             className="w-full bg-dark-bg border border-gray-700 rounded-lg p-3 text-gray-300 focus:outline-none focus:border-indigo-500 transition-all placeholder-gray-600"
           />
         </div>
-        <div className="flex items-center gap-3 mt-2">
-          <label className="flex items-center gap-2 cursor-pointer">
+        <div className="flex items-center gap-3 mt-4">
+          <label className="flex items-center gap-2 cursor-pointer w-1/2">
             <input
               type="checkbox"
               checked={isBand}
@@ -286,6 +291,15 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
             />
             <span className="text-sm text-gray-400">È una Band / Gruppo?</span>
           </label>
+          <div className="w-1/2">
+            <input
+              type="text"
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
+              placeholder="#Tag opzionale (es. Tour 2026)"
+              className="w-full bg-dark-bg border border-gray-700 rounded-lg p-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500 transition-all placeholder-gray-600"
+            />
+          </div>
         </div>
       </div>
 

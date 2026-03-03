@@ -13,11 +13,12 @@ export default defineConfig(({ mode }) => {
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.PASSWORD': JSON.stringify(env.PASSWORD)
+      'process.env.PASSWORD': JSON.stringify(env.PASSWORD),
+      'process.env.JWT_SECRET': JSON.stringify(env.JWT_SECRET)
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(__dirname, './src'),
       }
     }
   };

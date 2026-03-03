@@ -319,13 +319,6 @@ export const exportToHTML = (
                 <p class="synthesis-text">"${synthesis}"</p>
             </div>
             ` : ''}
-
-            ${fashionCritique ? `
-            <div class="synthesis-card" style="border-color: rgba(236, 72, 153, 0.3); background: linear-gradient(to bottom, #1f1a20, #110e13);">
-                <h3 style="color: #ec4899; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem; margin-bottom: 20px;">Critica Fashion / Recap</h3>
-                <p class="synthesis-text" style="color: #fce7f3;">${fashionCritique.replace(/\n/g, '<br>')}</p>
-            </div>
-            ` : ''}
         </div>
 
         ${musicIds.length > 0 ? `
