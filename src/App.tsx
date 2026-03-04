@@ -242,7 +242,7 @@ export default function App() {
       )}
 
       {/* Global Audio Player */}
-      <GlobalAudioPlayer />
+      {import.meta.env.VITE_ENABLE_AUDIO_STORAGE !== 'false' && <GlobalAudioPlayer />}
     </div>
   );
 }

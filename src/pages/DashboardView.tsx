@@ -94,6 +94,12 @@ export const DashboardView: React.FC = () => {
                     Il Giudizio Universale
                 </h2>
 
+                {(metadata.artistName || metadata.songTitle) && (
+                    <h3 className="text-2xl font-medium text-gray-200">
+                        {metadata.artistName || 'Artista Sconosciuto'} - {metadata.songTitle || 'Brano Sconosciuto'}
+                    </h3>
+                )}
+
                 {averageScore !== null && (
                     <div className="inline-flex items-center gap-3 bg-gray-800/50 border border-gray-700 px-6 py-3 rounded-full backdrop-blur-sm">
                         <span className="text-gray-400 uppercase text-xs font-bold tracking-widest">Media Critica Musicale</span>

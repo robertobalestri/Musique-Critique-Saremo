@@ -351,14 +351,14 @@ const HistoryView: React.FC<HistoryViewProps> = ({ onBack, onViewAnalysis }) => 
                             <div className="text-xs text-gray-500 mt-auto pt-4 border-t border-gray-800 flex justify-between items-center relative z-10">
                                 <span>{new Date(item.createdAt).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {item.audioUrl && (
+                                    {item.audioUrl && import.meta.env.VITE_ENABLE_AUDIO_STORAGE !== 'false' && (
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 playTrack(
-                                                    item.audioUrl,
-                                                    item.metadata?.songTitle,
-                                                    item.metadata?.artistName,
+                                                    item.audioUrl!,
+                                                    item.metadata?.songTitle || '',
+                                                    item.metadata?.artistName || '',
                                                     true
                                                 );
                                             }}

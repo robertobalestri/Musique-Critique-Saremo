@@ -1,15 +1,24 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, Music, Users, X, Activity, AlignLeft, CheckCircle2, Image as ImageIcon, Camera } from 'lucide-react';
+import { Upload, FileText, Music, Users, X, Activity, AlignLeft, Camera, Image as ImageIcon, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 
+export interface AudioFileData {
+  file: File;
+  id: string;
+  artistName: string;
+  songTitle: string;
+  isParseError: boolean;
+  images: File[]; // <- NUOVO CAMPO
+}
+
 interface AnalysisFormProps {
-  onAnalyze: (audio: File | undefined, bio: string, analyzeAll: boolean, lyrics: string, artistName: string, songTitle: string, isBand: boolean, images: File[], tag: string) => void;
+  onAnalyze: (audios: AudioFileData[], bio: string, analyzeAll: boolean, lyrics: string, fallbackArtistName: string, fallbackSongTitle: string, isBand: boolean, tag: string) => void;
   onAudioAnalysis: (audio: File) => void;
   isLoading: boolean;
   allowSingle?: boolean;
   allowAll?: boolean;
-  singleCriticName?: string; // Optional name to show on the button
+  singleCriticName?: string;
 }
 
 const AnalysisForm: React.FC<AnalysisFormProps> = ({
@@ -22,80 +31,154 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
 }) => {
   const [bio, setBio] = useState('');
   const [lyrics, setLyrics] = useState('');
-  const [audioFile, setAudioFile] = useState<File | null>(null);
+
+  // Array of complex audio objects instead of a single File
+  const [audioFilesData, setAudioFilesData] = useState<AudioFileData[]>([]);
+
   const [isTextOnly, setIsTextOnly] = useState(false);
-  const [artistName, setArtistName] = useState('');
-  const [songTitle, setSongTitle] = useState('');
-  const [isBand, setIsBand] = useState(false);
+
+  // Shared metadata
   const [tag, setTag] = useState('');
-  const [images, setImages] = useState<File[]>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const validateAndSetFile = (file: File) => {
-    // 100MB limit
-    if (file.size > 100 * 1024 * 1024) {
-      toast.error('Il file è troppo grande (Max 100MB). Prova a comprimerlo o usa un file più corto.');
-      return;
+  const determineMetadataFromName = (filename: string): { artist: string, title: string, error: boolean } => {
+    // Rimuove estensione
+    const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
+    if (nameWithoutExt.includes('-')) {
+      const parts = nameWithoutExt.split('-');
+      // Assume il primo pezzo è artista, il resto è titolo
+      return {
+        artist: parts[0].trim(),
+        title: parts.slice(1).join('-').trim(),
+        error: false
+      };
     }
+    return {
+      artist: '',
+      title: nameWithoutExt.trim(),
+      error: true
+    };
+  };
 
-    // Check mime type or extension
-    const validExtensions = ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac'];
-    const hasAudioType = file.type.startsWith('audio/');
-    const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+  const processIncomingFiles = (newFiles: File[]) => {
+    let hasTooLarge = false;
+    let hasInvalid = false;
 
-    if (hasAudioType || hasValidExtension) {
-      setAudioFile(file);
-    } else {
-      toast.error('Per favore carica un file audio valido (MP3, WAV, M4A, ecc).');
+    const validAudioFiles = newFiles.filter(file => {
+      if (file.size > 100 * 1024 * 1024) {
+        hasTooLarge = true;
+        return false;
+      }
+
+      const validExtensions = ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac'];
+      const hasAudioType = file.type.startsWith('audio/');
+      const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+
+      if (!hasAudioType && !hasValidExtension) {
+        hasInvalid = true;
+        return false;
+      }
+      return true;
+    });
+
+    if (hasTooLarge) toast.error('Attenzione: alcuni file grandi (>100MB) sono stati ignorati.');
+    if (hasInvalid) toast.error('Attenzione: alcuni file non audio sono stati ignorati.');
+
+    const newAudioData: AudioFileData[] = validAudioFiles.map(file => {
+      const parsed = determineMetadataFromName(file.name);
+      return {
+        file,
+        id: Math.random().toString(36).substring(7),
+        artistName: parsed.artist,
+        songTitle: parsed.title,
+        isParseError: parsed.error,
+        images: []
+      };
+    });
+
+    if (newAudioData.length > 0) {
+      setAudioFilesData(prev => [...prev, ...newAudioData]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      validateAndSetFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      processIncomingFiles(Array.from(e.target.files));
     }
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const updateAudioFileData = (id: string, field: 'artistName' | 'songTitle', value: string) => {
+    setAudioFilesData(prev => prev.map(item => {
+      if (item.id === id) {
+        const newItem = { ...item, [field]: value };
+        // Rimuoviamo l'errore se l'utente digita entrambi
+        if (newItem.artistName.trim() !== '' && newItem.songTitle.trim() !== '') {
+          newItem.isParseError = false;
+        }
+        return newItem;
+      }
+      return item;
+    }));
+  };
+
+  const removeAudioFile = (id: string) => {
+    setAudioFilesData(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleImageChangeForFile = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newImages = (Array.from(e.target.files) as File[]).filter(file => file.type.startsWith('image/'));
-      setImages(prev => [...prev, ...newImages]);
+      setAudioFilesData(prev => prev.map(item => {
+        if (item.id === id) {
+          return { ...item, images: [...item.images, ...newImages] };
+        }
+        return item;
+      }));
     }
   };
 
-  const removeImage = (index: number) => {
-    setImages(prev => prev.filter((_, i) => i !== index));
+  const removeImageForFile = (id: string, indexToRemove: number) => {
+    setAudioFilesData(prev => prev.map(item => {
+      if (item.id === id) {
+        return { ...item, images: item.images.filter((_, i) => i !== indexToRemove) };
+      }
+      return item;
+    }));
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files) {
       const droppedFiles = Array.from(e.dataTransfer.files) as File[];
-      const audio = droppedFiles.find(f => f.type.startsWith('audio/'));
-      const droppedImages = droppedFiles.filter(f => f.type.startsWith('image/'));
+      const audios = droppedFiles.filter(f => f.type.startsWith('audio/') || ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac'].some(ext => f.name.toLowerCase().endsWith(ext)));
 
-      if (audio && !isTextOnly) validateAndSetFile(audio);
-      if (droppedImages.length > 0) setImages(prev => [...prev, ...droppedImages]);
+      if (audios.length > 0 && !isTextOnly) processIncomingFiles(audios);
     }
   };
 
   const handleSubmit = (e: React.FormEvent, analyzeAll: boolean) => {
     e.preventDefault();
-    console.log(`[AnalysisForm] handleSubmit called. tag is: "${tag}"`);
 
     if (isTextOnly) {
       if (!lyrics.trim()) {
         toast.warning("Inserisci il testo per l'analisi testuale.");
         return;
       }
-      onAnalyze(undefined, bio, analyzeAll, lyrics, artistName, songTitle, isBand, images, tag);
+      onAnalyze([], bio, analyzeAll, lyrics, "", "", false, tag);
     } else {
-      if (!audioFile) {
-        toast.warning("Carica un file audio.");
+      if (audioFilesData.length === 0) {
+        toast.warning("Carica almeno un file audio.");
         return;
       }
-      onAnalyze(audioFile, bio, analyzeAll, lyrics, artistName, songTitle, isBand, images, tag);
+
+      const hasErrors = audioFilesData.some(a => a.artistName.trim() === '' || a.songTitle.trim() === '');
+      if (hasErrors) {
+        toast.error("Controlla le righe rosse: tutti i brani necessitano di un Artista e Titolo validi.");
+        return;
+      }
+
+      onAnalyze(audioFilesData, bio, analyzeAll, lyrics, "", "", false, tag);
     }
   };
 
@@ -107,7 +190,7 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
 
-      {/* Password Protection (Only if configured) */}
+      {/* Password Protection */}
       {REQUIRED_PASSWORD && !user && (
         <div className="bg-red-900/20 border border-red-900/50 rounded-xl p-4 flex items-center gap-4">
           <div className="p-2 bg-red-900/30 rounded-lg">
@@ -141,7 +224,7 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
               checked={isTextOnly}
               onChange={(e) => {
                 setIsTextOnly(e.target.checked);
-                if (e.target.checked) setAudioFile(null); // Optional: Clear audio when switching to text only
+                if (e.target.checked) setAudioFilesData([]);
               }}
             />
             <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
@@ -154,18 +237,10 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
         className={`
           border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 relative
           ${isTextOnly ? 'opacity-50 grayscale border-gray-800' : 'cursor-pointer border-gray-700 hover:border-gray-500 hover:bg-dark-surface'}
-          ${audioFile ? 'border-accent-primary bg-accent-primary/10' : ''}
         `}
-        onDragOver={(e) => {
-          e.preventDefault();
-          // Allow drag even if text only, for IMAGES
-        }}
+        onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
-        onClick={(e) => {
-          // If clicking the container, trigger audio if not present, or ignore?
-          // Actually let's keep audio trigger on main, relying on explicit buttons usually better but keeping simple.
-          if (!isTextOnly && !audioFile) fileInputRef.current?.click();
-        }}
+        onClick={() => !isTextOnly && fileInputRef.current?.click()}
       >
         <input
           type="file"
@@ -173,134 +248,131 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
           onChange={handleFileChange}
           accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac"
           className="hidden"
+          multiple
           disabled={isTextOnly}
         />
 
-        {audioFile ? (
-          <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300">
-            <div className="bg-accent-primary p-3 rounded-full mb-3 shadow-lg shadow-accent-primary/20">
-              <Music className="text-white" size={32} />
-            </div>
-            <p className="font-semibold text-white text-lg">{audioFile.name}</p>
-            <p className="text-sm text-gray-400 mt-1">{(audioFile.size / (1024 * 1024)).toFixed(2)} MB</p>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setAudioFile(null);
-              }}
-              className="mt-4 px-3 py-1 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-full text-xs flex items-center gap-1 transition-colors"
-            >
-              <X size={12} /> Rimuovi Audio
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center">
-            <Upload className="text-gray-500 mb-4" size={40} />
-            <p className="text-lg font-medium text-gray-300">Carica Audio</p>
-            <p className="text-sm text-gray-500 mt-2">
-              {isTextOnly ? "Modalità Testo: Caricamento Audio Disabilitato" : "Trascina audio qui o clicca"}
-            </p>
-          </div>
-        )}
+        <div className="flex flex-col items-center">
+          <Upload className="text-gray-500 mb-4" size={40} />
+          <p className="text-lg font-medium text-gray-300">Carica Audio (Singolo o Batch Multiplo)</p>
+          <p className="text-sm text-gray-500 mt-2">
+            {isTextOnly ? "Modalità Testo: Caricamento Audio Disabilitato" : "Trascina i tuoi brani qui o clicca per selezionarli"}
+          </p>
+        </div>
       </div>
 
-      {/* Image Upload Area (Always active, for fashion critic) */}
-      <div className="bg-dark-surface rounded-xl p-6 border border-gray-800">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <ImageIcon className="text-pink-400" size={20} />
-            <h3 className="font-semibold text-gray-200">Look & Immagine (Opzionale)</h3>
-          </div>
-          <button
-            type="button"
-            onClick={() => imageInputRef.current?.click()}
-            className="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1 rounded-lg transition-colors flex items-center gap-2"
-          >
-            <Camera size={14} /> Aggiungi Foto
-          </button>
-          <input
-            type="file"
-            ref={imageInputRef}
-            onChange={handleImageChange}
-            accept="image/*"
-            multiple
-            className="hidden"
-          />
-        </div>
+      {/* Batch Files List */}
+      {!isTextOnly && audioFilesData.length > 0 && (
+        <div className="bg-dark-surface rounded-xl p-4 border border-gray-800 space-y-3">
+          <h3 className="font-semibold text-gray-200 flex items-center gap-2 mb-3">
+            <Music size={18} /> Coda di Analisi ({audioFilesData.length})
+          </h3>
 
-        {images.length > 0 ? (
-          <div className="flex flex-wrap gap-4">
-            {images.map((img, idx) => (
-              <div key={idx} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-gray-700">
-                <img src={URL.createObjectURL(img)} alt="upload" className="w-full h-full object-cover" />
+          <div className="space-y-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+            {audioFilesData.map((data, index) => (
+              <div
+                key={data.id}
+                className={`p-4 rounded-xl border relative transition-colors ${data.isParseError ? 'bg-red-900/10 border-red-500/50' : 'bg-gray-900/50 border-gray-700'}`}
+              >
                 <button
-                  onClick={() => removeImage(idx)}
-                  className="absolute top-0 right-0 p-1 bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  type="button"
+                  onClick={() => removeAudioFile(data.id)}
+                  className="absolute top-3 right-3 p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
                 >
-                  <X size={12} />
+                  <X size={14} />
                 </button>
+
+                <div className="mb-3 pr-8">
+                  <p className="text-xs text-gray-500 font-mono mb-1 select-all">{data.file.name}</p>
+                  {data.isParseError && <p className="text-xs font-bold text-red-400 mb-2">⚠ Dividi manualmente l'artista dal titolo.</p>}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    value={data.artistName}
+                    onChange={(e) => updateAudioFileData(data.id, 'artistName', e.target.value)}
+                    placeholder="Nome Artista"
+                    className={`w-full bg-dark-bg border rounded-lg p-2.5 text-sm outline-none transition-colors ${data.isParseError && !data.artistName ? 'border-red-500/50 text-red-200' : 'border-gray-700 text-gray-200 focus:border-indigo-500'}`}
+                  />
+                  <input
+                    type="text"
+                    value={data.songTitle}
+                    onChange={(e) => updateAudioFileData(data.id, 'songTitle', e.target.value)}
+                    placeholder="Titolo Brano"
+                    className={`w-full bg-dark-bg border rounded-lg p-2.5 text-sm outline-none transition-colors ${data.isParseError && !data.songTitle ? 'border-red-500/50 text-red-200' : 'border-gray-700 text-gray-200 focus:border-indigo-500'}`}
+                  />
+                </div>
+
+                {/* Per-Song Image Upload Area */}
+                <div className="mt-4 pt-4 border-t border-gray-800/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Camera className="text-pink-400" size={16} />
+                    <h4 className="text-sm font-medium text-gray-300">
+                      Foto (Critica di Moda)
+                    </h4>
+                  </div>
+
+                  {data.images.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {data.images.map((img, idx) => (
+                        <div key={idx} className="relative group rounded-md overflow-hidden border border-gray-700 w-16 h-16">
+                          <img src={URL.createObjectURL(img)} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeImageForFile(data.id, idx)}
+                            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                          >
+                            <X className="text-white" size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <label
+                    htmlFor={`image-upload-${data.id}`}
+                    className="inline-flex items-center justify-center gap-2 py-2 px-3 border border-dashed border-gray-600 rounded-lg text-xs text-gray-400 hover:text-white hover:border-pink-500 hover:bg-pink-500/10 cursor-pointer transition-all font-medium"
+                  >
+                    <ImageIcon size={14} />
+                    Aggiungi Foto Brano
+                    <input
+                      id={`image-upload-${data.id}`}
+                      type="file"
+                      onChange={(e) => handleImageChangeForFile(data.id, e)}
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
             ))}
-            <button
-              onClick={() => imageInputRef.current?.click()}
-              className="w-20 h-20 flex items-center justify-center border border-dashed border-gray-600 rounded-lg text-gray-500 hover:text-white hover:border-gray-400 transition-colors"
-            >
-              +
-            </button>
           </div>
-        ) : (
-          <div
-            onClick={() => imageInputRef.current?.click()}
-            className="border border-dashed border-gray-700 rounded-lg p-6 text-center text-gray-500 hover:bg-gray-800/50 hover:border-pink-500/50 hover:text-pink-400 transition-all cursor-pointer"
-          >
-            <p className="text-sm">Trascina qui le foto dell'artista o del concerto.</p>
-            <p className="text-xs mt-1 opacity-70">Celestino Svolazzetti giudicherà l'outfit.</p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* NEW Metadata Inputs */}
+
+
+
+      {/* Shared Metadata (Tag / Bio) */}
       <div className="bg-dark-surface rounded-xl p-6 border border-gray-800 space-y-4">
         <h3 className="font-semibold text-gray-200 flex items-center gap-2">
-          <Music size={18} /> Dettagli Brano
+          <FileText size={18} /> Metadati Condivisi (per tutto il Batch)
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input
-            type="text"
-            value={artistName}
-            onChange={(e) => setArtistName(e.target.value)}
-            placeholder="Nome Artista / Band"
-            className="w-full bg-dark-bg border border-gray-700 rounded-lg p-3 text-gray-300 focus:outline-none focus:border-indigo-500 transition-all placeholder-gray-600"
-          />
-          <input
-            type="text"
-            value={songTitle}
-            onChange={(e) => setSongTitle(e.target.value)}
-            placeholder="Titolo Canzone"
-            className="w-full bg-dark-bg border border-gray-700 rounded-lg p-3 text-gray-300 focus:outline-none focus:border-indigo-500 transition-all placeholder-gray-600"
-          />
-        </div>
-        <div className="flex items-center gap-3 mt-4">
-          <label className="flex items-center gap-2 cursor-pointer w-1/2">
-            <input
-              type="checkbox"
-              checked={isBand}
-              onChange={(e) => setIsBand(e.target.checked)}
-              className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500 focus:ring-2"
-            />
-            <span className="text-sm text-gray-400">È una Band / Gruppo?</span>
-          </label>
-          <div className="w-1/2">
-            <input
-              type="text"
-              value={tag}
-              onChange={(e) => setTag(e.target.value)}
-              placeholder="#Tag opzionale (es. Tour 2026)"
-              className="w-full bg-dark-bg border border-gray-700 rounded-lg p-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500 transition-all placeholder-gray-600"
-            />
-          </div>
-        </div>
+        <input
+          type="text"
+          value={tag}
+          onChange={(e) => setTag(e.target.value)}
+          placeholder="#Tag opzionale (es. Album 2026, Sanremo, ...)"
+          className="w-full bg-dark-bg border border-gray-700 rounded-lg p-3 text-gray-300 focus:outline-none focus:border-indigo-500 transition-all placeholder-gray-600"
+        />
+        <textarea
+          value={bio}
+          onChange={(e) => setBio(e.target.value)}
+          placeholder="Note biografe condivise o contesto generico (opzionale)..."
+          className="w-full bg-dark-bg border border-gray-700 rounded-lg p-4 text-gray-300 focus:outline-none focus:border-accent-secondary focus:ring-1 focus:ring-accent-secondary h-24 resize-none transition-all placeholder-gray-600"
+        />
       </div>
 
       {/* Lyrics Input */}
@@ -338,10 +410,10 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
         {allowSingle && (
           <button
             onClick={(e) => handleSubmit(e, false)}
-            disabled={isLoading || (isTextOnly ? !lyrics.trim() : !audioFile) || !isPasswordCorrect}
+            disabled={isLoading || (isTextOnly ? !lyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect}
             className={`
               py-4 px-8 rounded-xl font-bold text-sm lg:text-base shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 w-full md:w-auto min-w-[200px]
-              ${isLoading || (isTextOnly ? !lyrics.trim() : !audioFile) || !isPasswordCorrect
+              ${isLoading || (isTextOnly ? !lyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect
                 ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
                 : 'bg-white text-black hover:bg-gray-200'}
             `}
@@ -353,10 +425,10 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
         {allowAll && (
           <button
             onClick={(e) => handleSubmit(e, true)}
-            disabled={isLoading || (isTextOnly ? !lyrics.trim() : !audioFile) || !isPasswordCorrect}
+            disabled={isLoading || (isTextOnly ? !lyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect}
             className={`
               py-4 px-8 rounded-xl font-bold text-sm lg:text-base shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 w-full md:w-auto min-w-[200px]
-              ${isLoading || (isTextOnly ? !lyrics.trim() : !audioFile) || !isPasswordCorrect
+              ${isLoading || (isTextOnly ? !lyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect
                 ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
                 : 'bg-gradient-to-r from-accent-primary to-accent-secondary text-white hover:opacity-90 hover:shadow-accent-primary/25'}
             `}
@@ -378,20 +450,20 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
           </button>
         )}
 
-        {/* Technical Analysis - Only visible if audio exists */}
+        {/* Technical Analysis - Only visible if single audio exists */}
         <button
           type="button"
-          onClick={() => audioFile && onAudioAnalysis(audioFile)}
-          disabled={!audioFile || isLoading || isTextOnly || !isPasswordCorrect}
+          onClick={() => audioFilesData.length === 1 && onAudioAnalysis(audioFilesData[0].file)}
+          disabled={audioFilesData.length !== 1 || isLoading || isTextOnly || !isPasswordCorrect}
           className={`
             py-4 px-8 rounded-xl font-bold text-sm lg:text-base shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 border-2 w-full md:w-auto min-w-[200px]
-            ${!audioFile || isLoading || isTextOnly || !isPasswordCorrect
+            ${audioFilesData.length !== 1 || isLoading || isTextOnly || !isPasswordCorrect
               ? 'border-gray-800 text-gray-600 cursor-not-allowed opacity-50'
               : 'border-blue-500 text-blue-400 hover:bg-blue-500/10'}
           `}
         >
           <Activity size={20} />
-          Analisi Tecnica
+          Analisi Tecnica (Singolo)
         </button>
       </div>
     </div>

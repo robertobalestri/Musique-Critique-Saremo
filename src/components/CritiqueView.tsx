@@ -67,6 +67,14 @@ const CritiqueView: React.FC<CritiqueViewProps> = ({ result, personaId, onReset,
 
             {/* Score Header */}
             <div className="flex flex-col items-center mb-8 animate-in zoom-in duration-500">
+              {(metadata.artistName || metadata.songTitle) && (
+                <div className="text-center mb-4 text-gray-400 font-mono text-sm border-b border-gray-800 pb-2">
+                  <span className="font-bold text-gray-200">{metadata.artistName || 'Artista Sconosciuto'}</span>
+                  <span className="mx-2">-</span>
+                  <span className="italic">{metadata.songTitle || 'Brano Sconosciuto'}</span>
+                </div>
+              )}
+
               <div className={`text-6xl font-black ${persona.color} drop-shadow-2xl mb-2`}>
                 {result.lyricalAnalysis.finalScore}
                 <span className="text-2xl text-gray-500 font-medium">/100</span>
