@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePersonas } from '../contexts/PersonaContext';
 import { extractAudioFeatures } from '../services/audioAnalysisService';
 import { CriticPersona } from '../types';
-import { analyzeSong, analyzeFashion, synthesizeReviews } from '../services/geminiService';
+import { analyzeSongBatch, analyzeFashion, synthesizeReviews } from '../services/geminiService';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE_URL } from '../config';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -138,23 +138,33 @@ export const Home: React.FC = () => {
                         fashionCritique: fashionContextResult || undefined
                     });
 
-                    // 2. Music Analysis
+                    // 2. Music Analysis (Batch API call to save bandwidth and backend RAM)
                     const musicPersonas = (Object.values(PERSONAS) as CriticPersona[]).filter(p => !p.type || p.type === 'music');
-                    const promises = musicPersonas.map(persona => {
-                        return analyzeSong(safeAudio, currentBio, persona.id, audioContextReport, currentLyrics, currentArtist, currentTitle, isBand, fashionContextResult || undefined)
-                            .then(res => ({ id: persona.id, data: res }))
-                            .catch(e => null);
-                    });
-
-                    const responses = await Promise.all(promises);
+                    const personaIds = musicPersonas.map(p => p.id);
 
                     let successCount = 0;
-                    responses.forEach(r => {
-                        if (r) {
-                            newResults[r.id] = r.data;
-                            successCount++;
+                    if (personaIds.length > 0) {
+                        try {
+                            const batchResponses = await analyzeSongBatch(
+                                safeAudio,
+                                currentBio,
+                                personaIds,
+                                audioContextReport,
+                                currentLyrics,
+                                currentArtist,
+                                currentTitle,
+                                isBand,
+                                fashionContextResult || undefined
+                            );
+
+                            Object.entries(batchResponses).forEach(([pId, data]) => {
+                                newResults[pId] = data;
+                                successCount++;
+                            });
+                        } catch (e) {
+                            console.error("Batch music analysis failed", e);
                         }
-                    });
+                    }
 
                     if (successCount === 0 && Object.keys(newResults).length === 0) {
                         toast.error(`Analisi fallita per ${currentTitle}. Vado avanti.`);

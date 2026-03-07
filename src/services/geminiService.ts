@@ -189,6 +189,48 @@ export const analyzeSong = async (
   return response.json();
 };
 
+export const analyzeSongBatch = async (
+  audioFile: File | undefined,
+  bio: string,
+  personaIds: PersonaId[],
+  audioFeatures?: string,
+  lyrics?: string,
+  artistName?: string,
+  songTitle?: string,
+  isBand?: boolean,
+  fashionContext?: string
+): Promise<Record<PersonaId, AnalysisResponse>> => {
+  let audioData = null;
+  if (audioFile) {
+    audioData = await fileToBase64Dict(audioFile);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/analyze/song-batch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      audioData,
+      bio,
+      personaIds,
+      audioFeatures,
+      lyrics,
+      artistName,
+      songTitle,
+      isBand,
+      fashionContext
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Errore dal server: ${err}`);
+  }
+
+  return response.json();
+};
+
 export const generateDiscussionTurn = async (
   history: DiscussionMessage[],
   currentSpeakerId: PersonaId,
