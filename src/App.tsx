@@ -10,9 +10,9 @@ import { Home } from './pages/Home';
 import { DashboardView } from './pages/DashboardView';
 import HistoryView from './components/HistoryView';
 import GlobalAudioPlayer from './components/GlobalAudioPlayer';
-import { PERSONAS } from './constants';
+import { usePersonas } from './contexts/PersonaContext';
 import { generateDiscussionTurn } from './services/geminiService';
-import { PersonaId, DiscussionMessage } from './types';
+import { PersonaId, DiscussionMessage, CriticPersona } from './types';
 
 // Temporarily moved here for the roundtable chat since we removed it from global state
 // To fully decouple, we should extract roundtable to a context, but we keep it here for now as a global overlay.
@@ -45,6 +45,9 @@ export default function App() {
   });
   const [isChatLoading, setIsChatLoading] = useState(false);
 
+  // Dynamic Personas
+  const { personas: PERSONAS, isLoadingPersonas, error } = usePersonas();
+
   const handleAutoDiscussion = async (count: number) => {
     if (!lastAnalysisRequest) return;
     setIsChatLoading(true);
@@ -54,7 +57,7 @@ export default function App() {
       let lastSpeakerId: PersonaId | null = currentHistory.length > 0 ? currentHistory[currentHistory.length - 1].personaId : null;
 
       for (let i = 0; i < count; i++) {
-        const availablePersonas = Object.values(PERSONAS).filter(p => {
+        const availablePersonas = (Object.values(PERSONAS) as CriticPersona[]).filter(p => {
           if (activeRoundtable === 'music') return (!p.type || p.type === 'music');
           if (activeRoundtable === 'fashion') return (p.type === 'fashion');
           return true;
@@ -69,7 +72,7 @@ export default function App() {
           randomPersona.id,
           lastAnalysisRequest.artist,
           lastAnalysisRequest.title,
-          results ? results[randomPersona.id] : undefined,
+          results && randomPersona.id ? results[randomPersona.id] : undefined,
           activeRoundtable === 'fashion' ? (lastAnalysisRequest.fashionCritique) : undefined
         );
 
@@ -112,6 +115,34 @@ export default function App() {
     navigate('/history');
     setIsSidebarOpen(false);
   };
+
+  if (isLoadingPersonas) {
+    return (
+      <div className="min-h-screen bg-dark-bg text-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+          <p className="text-gray-400 font-medium animate-pulse">Caricamento AI Critics...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-dark-bg text-white flex items-center justify-center p-4">
+        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 max-w-md text-center">
+          <h2 className="text-xl font-bold text-red-500 mb-2">Errore di Caricamento</h2>
+          <p className="text-gray-300">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-6 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium"
+          >
+            Riprova
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-dark-bg text-gray-100 font-sans selection:bg-accent-primary selection:text-white flex overflow-hidden">

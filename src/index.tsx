@@ -4,6 +4,7 @@ import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { AnalysisProvider } from './contexts/AnalysisContext';
 import { PlayerProvider } from './contexts/PlayerContext';
+import { PersonaProvider } from './contexts/PersonaContext';
 import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
@@ -16,14 +17,16 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <AuthProvider>
-      <AnalysisProvider>
-        <PlayerProvider>
-          <BrowserRouter>
-            <App />
-            <Toaster position="top-center" theme="dark" richColors />
-          </BrowserRouter>
-        </PlayerProvider>
-      </AnalysisProvider>
+      <PersonaProvider>
+        <AnalysisProvider>
+          <PlayerProvider>
+            <BrowserRouter>
+              <App />
+              <Toaster position="top-center" theme="dark" richColors />
+            </BrowserRouter>
+          </PlayerProvider>
+        </AnalysisProvider>
+      </PersonaProvider>
     </AuthProvider>
   </React.StrictMode>
 );

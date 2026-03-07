@@ -3,14 +3,15 @@ import { Headphones } from 'lucide-react';
 import AnalysisForm from '../components/AnalysisForm';
 import { useAnalysis } from '../contexts/AnalysisContext';
 import { useNavigate } from 'react-router-dom';
-import { PERSONAS } from '../constants';
+import { usePersonas } from '../contexts/PersonaContext';
 import { extractAudioFeatures } from '../services/audioAnalysisService';
+import { CriticPersona } from '../types';
 import { analyzeSong, analyzeFashion, synthesizeReviews } from '../services/geminiService';
 import { useAuth } from '../contexts/AuthContext';
+import { API_BASE_URL } from '../config';
 import { usePlayer } from '../contexts/PlayerContext';
 import Cookies from 'js-cookie';
 import { toast } from 'sonner';
-import { upload } from '@vercel/blob/client';
 import { AudioFileData } from '../components/AnalysisForm';
 
 async function calculateSHA256(file: File): Promise<string> {
@@ -35,17 +36,14 @@ export const Home: React.FC = () => {
         setIsSynthesizing
     } = useAnalysis();
 
+    const { personas: PERSONAS } = usePersonas();
+
     const [isLoading, setIsLoading] = useState(false);
     const [batchProgress, setBatchProgress] = useState<{ current: number, total: number, itemName: string } | null>(null);
 
     const handleAnalyze = async (
-        audios: AudioFileData[], // <- Modificato per ricevere l'array
-        bio: string,
+        audios: AudioFileData[],
         analyzeAll: boolean,
-        lyrics: string,
-        // (artistName e songTitle singoli da text-mode)
-        fallbackArtistName: string,
-        fallbackSongTitle: string,
         isBand: boolean,
         tag: string
     ) => {
@@ -64,14 +62,7 @@ export const Home: React.FC = () => {
 
         try {
             const isBatch = audios.length > 1;
-            const itemsToProcess = audios.length > 0 ? audios : [{
-                file: undefined as any,
-                artistName: fallbackArtistName,
-                songTitle: fallbackSongTitle,
-                id: 'text-only',
-                isParseError: false,
-                images: []
-            }];
+            const itemsToProcess = audios;
 
             if (isBatch) setBatchProgress({ current: 0, total: itemsToProcess.length, itemName: '' });
 
@@ -81,6 +72,8 @@ export const Home: React.FC = () => {
                 const currentArtist = currentItem.artistName;
                 const currentTitle = currentItem.songTitle;
                 const currentImages = currentItem.images || [];
+                const currentLyrics = currentItem.lyrics || '';
+                const currentBio = currentItem.bio || '';
 
                 if (isBatch) {
                     setBatchProgress({ current: i + 1, total: itemsToProcess.length, itemName: currentTitle });
@@ -100,10 +93,10 @@ export const Home: React.FC = () => {
                     // è una scelta accettabile.
                     if (currentImages && currentImages.length > 0) {
                         try {
-                            const fashionPersonas = Object.values(PERSONAS).filter(p => p.type === 'fashion');
+                            const fashionPersonas = (Object.values(PERSONAS) as CriticPersona[]).filter(p => p.type === 'fashion');
                             const fashionPromises = fashionPersonas.map(async (p) => {
                                 try {
-                                    const critique = await analyzeFashion(currentImages, p.id, bio, currentArtist);
+                                    const critique = await analyzeFashion(currentImages, p.id, currentBio, currentArtist);
                                     return { id: p.id, name: p.name, critique };
                                 } catch (e) {
                                     console.warn(`Fashion analysis failed for ${p.name}`, e);
@@ -140,15 +133,15 @@ export const Home: React.FC = () => {
                     setLastAnalysisRequest({
                         artist: currentArtist,
                         title: currentTitle,
-                        lyrics,
-                        bio,
+                        lyrics: currentLyrics,
+                        bio: currentBio,
                         fashionCritique: fashionContextResult || undefined
                     });
 
                     // 2. Music Analysis
-                    const musicPersonas = Object.values(PERSONAS).filter(p => !p.type || p.type === 'music');
+                    const musicPersonas = (Object.values(PERSONAS) as CriticPersona[]).filter(p => !p.type || p.type === 'music');
                     const promises = musicPersonas.map(persona => {
-                        return analyzeSong(safeAudio, bio, persona.id, audioContextReport, lyrics, currentArtist, currentTitle, isBand, fashionContextResult || undefined)
+                        return analyzeSong(safeAudio, currentBio, persona.id, audioContextReport, currentLyrics, currentArtist, currentTitle, isBand, fashionContextResult || undefined)
                             .then(res => ({ id: persona.id, data: res }))
                             .catch(e => null);
                     });
@@ -223,24 +216,28 @@ export const Home: React.FC = () => {
                                     console.log("Audio storage disabled via ENV. Skipping Blob upload.");
                                 } else {
                                     // Check if file is already on Vercel Blob
-                                    const checkRes = await fetch('/api/checkAudioHash', {
+                                    const checkRes = await fetch(`${API_BASE_URL}/db/check-audio?audioHash=${audioHash}`, {
                                         method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ audioHash })
+                                        headers: { 'Content-Type': 'application/json' }
                                     });
-
                                     const checkData = await checkRes.json();
 
                                     if (checkData.exists && checkData.audioUrl) {
                                         audioUrl = checkData.audioUrl;
-                                        console.log("Audio deduplicato! Uso l'URL esistente:", audioUrl);
+                                        console.log("Audio trovato su Vercel Blob tramite cache MongoDB:", audioUrl);
                                     } else {
-                                        if (!isBatch) toast.info("Upload in corso (salvataggio audio storico)...");
-                                        const blobResult = await upload(currentAudio.name, currentAudio, {
-                                            access: 'public',
-                                            handleUploadUrl: '/api/uploadToken',
+                                        if (!isBatch) toast.info("Upload in corso (salvataggio audio)...");
+                                        const formData = new FormData();
+                                        formData.append('file', currentAudio);
+                                        formData.append('audioHash', audioHash);
+
+                                        const uploadRes = await fetch(`${API_BASE_URL}/db/upload-audio`, {
+                                            method: 'POST',
+                                            body: formData
                                         });
-                                        audioUrl = blobResult.url;
+                                        if (!uploadRes.ok) throw new Error("Upload fallito");
+                                        const uploadData = await uploadRes.json();
+                                        audioUrl = uploadData.url;
                                     }
                                 }
                             } catch (blobError) {
@@ -264,7 +261,7 @@ export const Home: React.FC = () => {
                         const headers: HeadersInit = { 'Content-Type': 'application/json' };
                         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-                        const saveResponse = await fetch('/api/saveAnalysis', {
+                        const saveResponse = await fetch(`${API_BASE_URL}/db/analysis`, {
                             method: 'POST',
                             headers,
                             body: JSON.stringify(reqBody)
@@ -349,7 +346,7 @@ export const Home: React.FC = () => {
                     )}
 
                     <AnalysisForm
-                        onAnalyze={handleAnalyze as any} // Cast as any per superare l'errore type durante refactor
+                        onAnalyze={handleAnalyze}
                         onAudioAnalysis={handleAudioAnalysis}
                         isLoading={isLoading}
                         allowSingle={false}

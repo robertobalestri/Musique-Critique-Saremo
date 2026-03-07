@@ -1,5 +1,5 @@
 import React from 'react';
-import { PERSONAS } from '../constants';
+import { usePersonas } from '../contexts/PersonaContext';
 import { PersonaId } from '../types';
 import * as Icons from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,8 +13,9 @@ interface SidebarProps {
     onOpenAuth: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onSelectCritic, selectedCriticId, onNewAnalysis, onShowHistory, onOpenAuth }) => {
-    const { user, logout } = useAuth();
+export default function Sidebar({ onSelectCritic, selectedCriticId, onNewAnalysis, onShowHistory, onOpenAuth }: SidebarProps) {
+    const { user, signOut } = useAuth();
+    const { personas: PERSONAS } = usePersonas();
 
     return (
         <aside className="w-full md:w-64 bg-dark-surface border-r border-gray-800 flex flex-col h-full overflow-y-auto">
@@ -50,7 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectCritic, selectedCriticId, onN
                         I Nostri Critici Musicali
                     </h3>
                     <div className="space-y-1">
-                        {Object.values(PERSONAS)
+                        {(Object.values(PERSONAS) as import('../types').CriticPersona[])
                             .filter(p => !p.type || p.type === 'music')
                             .map((persona) => {
                                 const IconComponent = (Icons as any)[persona.icon] || Icons.User;
@@ -88,7 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectCritic, selectedCriticId, onN
                         I Nostri Critici Fashion
                     </h3>
                     <div className="space-y-1">
-                        {Object.values(PERSONAS)
+                        {(Object.values(PERSONAS) as import('../types').CriticPersona[])
                             .filter(p => p.type === 'fashion')
                             .map((persona) => {
                                 const IconComponent = (Icons as any)[persona.icon] || Icons.User;
@@ -129,7 +130,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectCritic, selectedCriticId, onN
                             <span>{user.username}</span>
                         </div>
                         <button
-                            onClick={logout}
+                            onClick={signOut}
                             className="w-full py-1.5 px-3 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-md transition-colors text-xs font-medium"
                         >
                             Logout
@@ -150,4 +151,3 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectCritic, selectedCriticId, onN
     );
 };
 
-export default Sidebar;

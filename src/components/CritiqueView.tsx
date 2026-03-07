@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnalysisResponse, PersonaId } from '../types';
-import { PERSONAS } from '../constants';
+import { usePersonas } from '../contexts/PersonaContext';
 import { Quote, Star, Share2, RefreshCw, AlertTriangle, TrendingUp, Music, FileText, Download } from 'lucide-react';
 import { exportToCSV } from '../services/exportService';
 
@@ -13,6 +13,7 @@ interface CritiqueViewProps {
 }
 
 const CritiqueView: React.FC<CritiqueViewProps> = ({ result, personaId, onReset, metadata, fashionCritique }) => {
+  const { personas: PERSONAS } = usePersonas();
   const persona = PERSONAS[personaId];
   const { lyricalAnalysis, musicalAnalysis } = result;
 

@@ -4,9 +4,10 @@ import { AnalysisResponse } from '../types';
 import { exportToCSV } from '../services/exportService';
 import { exportToHTML } from '../services/htmlExportService';
 import { useAuth } from '../contexts/AuthContext';
-import { PERSONAS } from '../constants';
+import { usePersonas } from '../contexts/PersonaContext';
 import { toast } from 'sonner';
 import { usePlayer } from '../contexts/PlayerContext';
+import { API_BASE_URL } from '../config';
 
 interface HistoryItem {
     _id: string;
@@ -33,6 +34,7 @@ interface HistoryViewProps {
 const HistoryView: React.FC<HistoryViewProps> = ({ onBack, onViewAnalysis }) => {
     const { token } = useAuth();
     const { playTrack } = usePlayer();
+    const { personas: PERSONAS } = usePersonas();
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -64,7 +66,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ onBack, onViewAnalysis }) => 
             const headers: HeadersInit = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
-            const response = await fetch(`/api/getHistory?page=${pageNum}&limit=${limit}`, { headers });
+            const response = await fetch(`${API_BASE_URL}/db/history?page=${pageNum}&limit=${limit}`, { headers });
 
             if (!response.ok) {
                 const errData = await response.json().catch(() => null);
@@ -258,7 +260,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ onBack, onViewAnalysis }) => 
                         <option value="musicScoreDesc" className="bg-gray-800 text-white">Voto Medio Musicale (Max)</option>
                         <option value="fashionScoreDesc" className="bg-gray-800 text-white">Voto Fashion (Max)</option>
                         <option disabled className="bg-gray-800 text-gray-500">──────────</option>
-                        {Object.values(PERSONAS).map(p => (
+                        {(Object.values(PERSONAS) as import('../types').CriticPersona[]).map(p => (
                             <option key={`critic-${p.id}`} value={`critic_${p.id}`} className="bg-gray-800 text-white">
                                 Ordina per Voto {p.name}
                             </option>

@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, Music, Users, X, Activity, AlignLeft, Camera, Image as ImageIcon, CheckCircle2 } from 'lucide-react';
+import { Upload, FileText, Music, Users, X, Activity, AlignLeft, Camera, Image as ImageIcon, CheckCircle2, Youtube, Loader2, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
+import { downloadYoutubeAudio } from '../api/youtube';
 
 export interface AudioFileData {
   file: File;
@@ -9,11 +10,13 @@ export interface AudioFileData {
   artistName: string;
   songTitle: string;
   isParseError: boolean;
-  images: File[]; // <- NUOVO CAMPO
+  images: File[];
+  lyrics: string;
+  bio: string;
 }
 
 interface AnalysisFormProps {
-  onAnalyze: (audios: AudioFileData[], bio: string, analyzeAll: boolean, lyrics: string, fallbackArtistName: string, fallbackSongTitle: string, isBand: boolean, tag: string) => void;
+  onAnalyze: (audios: AudioFileData[], analyzeAll: boolean, isBand: boolean, tag: string) => void;
   onAudioAnalysis: (audio: File) => void;
   isLoading: boolean;
   allowSingle?: boolean;
@@ -29,16 +32,21 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
   allowAll = true,
   singleCriticName
 }) => {
-  const [bio, setBio] = useState('');
-  const [lyrics, setLyrics] = useState('');
+  const [textOnlyBio, setTextOnlyBio] = useState('');
+  const [textOnlyLyrics, setTextOnlyLyrics] = useState('');
 
   // Array of complex audio objects instead of a single File
   const [audioFilesData, setAudioFilesData] = useState<AudioFileData[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   const [isTextOnly, setIsTextOnly] = useState(false);
 
   // Shared metadata
   const [tag, setTag] = useState('');
+
+  // Youtube Links
+  const [youtubeLinks, setYoutubeLinks] = useState('');
+  const [isProcessingYoutube, setIsProcessingYoutube] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -93,7 +101,9 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
         artistName: parsed.artist,
         songTitle: parsed.title,
         isParseError: parsed.error,
-        images: []
+        images: [],
+        lyrics: '',
+        bio: ''
       };
     });
 
@@ -108,10 +118,10 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
     }
   };
 
-  const updateAudioFileData = (id: string, field: 'artistName' | 'songTitle', value: string) => {
+  const updateAudioFileData = (id: string, field: keyof AudioFileData, value: any) => {
     setAudioFilesData(prev => prev.map(item => {
       if (item.id === id) {
-        const newItem = { ...item, [field]: value };
+        const newItem = { ...item, [field]: value } as AudioFileData;
         // Rimuoviamo l'errore se l'utente digita entrambi
         if (newItem.artistName.trim() !== '' && newItem.songTitle.trim() !== '') {
           newItem.isParseError = false;
@@ -123,7 +133,22 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
   };
 
   const removeAudioFile = (id: string) => {
-    setAudioFilesData(prev => prev.filter(item => item.id !== id));
+    setAudioFilesData(prev => {
+      const filtered = prev.filter(item => item.id !== id);
+      if (currentIndex >= filtered.length && filtered.length > 0) {
+        setCurrentIndex(filtered.length - 1);
+      } else if (filtered.length === 0) {
+        setCurrentIndex(0);
+      }
+      return filtered;
+    });
+  };
+
+  const copyToAll = (field: 'lyrics' | 'bio' | 'images') => {
+    if (audioFilesData.length <= 1) return;
+    const currentValue = audioFilesData[currentIndex][field];
+    setAudioFilesData(prev => prev.map(item => ({ ...item, [field]: currentValue })));
+    toast.success(`Copiato a tutti i brani!`);
   };
 
   const handleImageChangeForFile = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,15 +182,77 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
     }
   };
 
+  const handleAddYoutubeLinks = async () => {
+    const urls = youtubeLinks.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (urls.length === 0) return;
+
+    setIsProcessingYoutube(true);
+    let successCount = 0;
+
+    for (const url of urls) {
+      try {
+        const toastId = toast.loading(`Scaricando ${url.substring(0, 30)}...`);
+        const result = await downloadYoutubeAudio(url);
+
+        // Convert base64 to File
+        const byteCharacters = atob(result.base64_audio);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: result.mime_type });
+        const ext = result.mime_type.split('/')[1] || 'mp3';
+        const file = new File([blob], `${result.artist} - ${result.title}.${ext}`, { type: result.mime_type });
+
+        const newAudioItem: AudioFileData = {
+          file,
+          id: Math.random().toString(36).substring(7),
+          artistName: result.artist,
+          songTitle: result.title,
+          isParseError: (!result.artist || !result.title) ? true : false,
+          images: [],
+          lyrics: '',
+          bio: ''
+        };
+
+        setAudioFilesData(prev => [...prev, newAudioItem]);
+        successCount++;
+        toast.success(`Aggiunto: ${result.artist} - ${result.title}`, { id: toastId });
+      } catch (error: any) {
+        console.error("Youtube error:", error);
+        toast.error(`Errore con ${url}: ${error.message || 'Sconosciuto'}`);
+      }
+    }
+
+    if (successCount === urls.length) {
+      setYoutubeLinks(''); // Pulisci la casella di testo solo se tutti hanno successo
+    } else if (successCount > 0) {
+      toast.warning(`${successCount} su ${urls.length} link aggiunti con successo.`);
+    }
+
+    setIsProcessingYoutube(false);
+  };
+
   const handleSubmit = (e: React.FormEvent, analyzeAll: boolean) => {
     e.preventDefault();
 
     if (isTextOnly) {
-      if (!lyrics.trim()) {
+      if (!textOnlyLyrics.trim()) {
         toast.warning("Inserisci il testo per l'analisi testuale.");
         return;
       }
-      onAnalyze([], bio, analyzeAll, lyrics, "", "", false, tag);
+      const textAudioData: AudioFileData = {
+        file: undefined as any,
+        id: 'text-only',
+        artistName: "Sconosciuto",
+        songTitle: "Testo",
+        isParseError: false,
+        images: [],
+        lyrics: textOnlyLyrics,
+        bio: textOnlyBio
+      };
+      onAnalyze([textAudioData], analyzeAll, false, tag);
     } else {
       if (audioFilesData.length === 0) {
         toast.warning("Carica almeno un file audio.");
@@ -178,7 +265,7 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
         return;
       }
 
-      onAnalyze(audioFilesData, bio, analyzeAll, lyrics, "", "", false, tag);
+      onAnalyze(audioFilesData, analyzeAll, false, tag);
     }
   };
 
@@ -254,154 +341,260 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
 
         <div className="flex flex-col items-center">
           <Upload className="text-gray-500 mb-4" size={40} />
-          <p className="text-lg font-medium text-gray-300">Carica Audio (Singolo o Batch Multiplo)</p>
+          <p className="text-lg font-medium text-gray-300">Carica Audio (Manuale)</p>
           <p className="text-sm text-gray-500 mt-2">
-            {isTextOnly ? "Modalità Testo: Caricamento Audio Disabilitato" : "Trascina i tuoi brani qui o clicca per selezionarli"}
+            {isTextOnly ? "Modalità Testo: Caricamento Audio Disabilitato" : "Trascina i tuoi file mp3 qui o clicca per selezionarli"}
           </p>
         </div>
       </div>
 
-      {/* Batch Files List */}
+      {/* YouTube Import Area */}
+      {!isTextOnly && (
+        <div className="bg-dark-surface border border-gray-800 rounded-2xl p-6 relative">
+          <div className="flex items-center gap-2 mb-4">
+            <Youtube className="text-red-500" size={24} />
+            <h3 className="font-semibold text-gray-200">Importa da YouTube</h3>
+          </div>
+          <textarea
+            value={youtubeLinks}
+            onChange={(e) => setYoutubeLinks(e.target.value)}
+            disabled={isProcessingYoutube}
+            placeholder="Incolla qui i link YouTube (uno per riga)...&#10;In automatico l'IA cercherà di scaricare l'audio ed estrarre Titolo e Artista."
+            className="w-full bg-dark-bg border border-gray-700 rounded-lg p-3 text-sm text-gray-300 focus:outline-none focus:border-red-500 transition-colors h-24 resize-y mb-4"
+          />
+          <button
+            type="button"
+            onClick={handleAddYoutubeLinks}
+            disabled={isProcessingYoutube || !youtubeLinks.trim()}
+            className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all ${isProcessingYoutube || !youtubeLinks.trim()
+              ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+              : 'bg-red-600/20 text-red-500 hover:bg-red-600/30 border border-red-500/50 hover:scale-[1.02]'
+              }`}
+          >
+            {isProcessingYoutube ? (
+              <>
+                <Loader2 className="animate-spin" size={18} /> Elaborazione Link in corso...
+              </>
+            ) : (
+              <>
+                <Youtube size={18} /> Scarica e Aggiungi alla Coda
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Batch Files Carousel */}
       {!isTextOnly && audioFilesData.length > 0 && (
-        <div className="bg-dark-surface rounded-xl p-4 border border-gray-800 space-y-3">
-          <h3 className="font-semibold text-gray-200 flex items-center gap-2 mb-3">
-            <Music size={18} /> Coda di Analisi ({audioFilesData.length})
-          </h3>
-
-          <div className="space-y-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
-            {audioFilesData.map((data, index) => (
-              <div
-                key={data.id}
-                className={`p-4 rounded-xl border relative transition-colors ${data.isParseError ? 'bg-red-900/10 border-red-500/50' : 'bg-gray-900/50 border-gray-700'}`}
+        <div className="bg-dark-surface rounded-xl p-0 border border-gray-800 overflow-hidden">
+          {/* Header Carosello */}
+          <div className="bg-gray-800/40 border-b border-gray-800 p-4 flex items-center justify-between">
+            <h3 className="font-semibold text-gray-200 flex items-center gap-2">
+              <Music size={18} /> Brano {currentIndex + 1} di {audioFilesData.length}
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentIndex(c => Math.max(0, c - 1))}
+                disabled={currentIndex === 0}
+                className="p-2 bg-gray-700/50 hover:bg-gray-700 text-white rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Brano Precedente"
               >
-                <button
-                  type="button"
-                  onClick={() => removeAudioFile(data.id)}
-                  className="absolute top-3 right-3 p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
-                >
-                  <X size={14} />
-                </button>
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentIndex(c => Math.min(audioFilesData.length - 1, c + 1))}
+                disabled={currentIndex === audioFilesData.length - 1}
+                className="p-2 bg-gray-700/50 hover:bg-gray-700 text-white rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Brano Successivo"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          </div>
 
-                <div className="mb-3 pr-8">
-                  <p className="text-xs text-gray-500 font-mono mb-1 select-all">{data.file.name}</p>
-                  {data.isParseError && <p className="text-xs font-bold text-red-400 mb-2">⚠ Dividi manualmente l'artista dal titolo.</p>}
-                </div>
+          <div className="p-6">
+            {(() => {
+              const data = audioFilesData[currentIndex];
+              if (!data) return null;
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input
-                    type="text"
-                    value={data.artistName}
-                    onChange={(e) => updateAudioFileData(data.id, 'artistName', e.target.value)}
-                    placeholder="Nome Artista"
-                    className={`w-full bg-dark-bg border rounded-lg p-2.5 text-sm outline-none transition-colors ${data.isParseError && !data.artistName ? 'border-red-500/50 text-red-200' : 'border-gray-700 text-gray-200 focus:border-indigo-500'}`}
-                  />
-                  <input
-                    type="text"
-                    value={data.songTitle}
-                    onChange={(e) => updateAudioFileData(data.id, 'songTitle', e.target.value)}
-                    placeholder="Titolo Brano"
-                    className={`w-full bg-dark-bg border rounded-lg p-2.5 text-sm outline-none transition-colors ${data.isParseError && !data.songTitle ? 'border-red-500/50 text-red-200' : 'border-gray-700 text-gray-200 focus:border-indigo-500'}`}
-                  />
-                </div>
-
-                {/* Per-Song Image Upload Area */}
-                <div className="mt-4 pt-4 border-t border-gray-800/50">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Camera className="text-pink-400" size={16} />
-                    <h4 className="text-sm font-medium text-gray-300">
-                      Foto (Critica di Moda)
-                    </h4>
+              return (
+                <div key={data.id} className="space-y-6">
+                  {/* File origin info & remove button */}
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500 font-mono mb-1 select-all break-all">{data.file.name}</p>
+                      {data.isParseError && <p className="text-xs font-bold text-red-400 mt-1">⚠ Dividi manualmente l'artista dal titolo.</p>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeAudioFile(data.id)}
+                      className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors shrink-0 ml-4"
+                      title="Rimuovi Brano"
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
 
-                  {data.images.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {data.images.map((img, idx) => (
-                        <div key={idx} className="relative group rounded-md overflow-hidden border border-gray-700 w-16 h-16">
-                          <img src={URL.createObjectURL(img)} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
-                          <button
-                            type="button"
-                            onClick={() => removeImageForFile(data.id, idx)}
-                            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
-                          >
-                            <X className="text-white" size={16} />
-                          </button>
-                        </div>
-                      ))}
+                  {/* Meta: Artist & Title */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 mt-2">Nome Artista</label>
+                      <input
+                        type="text"
+                        value={data.artistName}
+                        onChange={(e) => updateAudioFileData(data.id, 'artistName', e.target.value)}
+                        placeholder="Nome Artista"
+                        className={`w-full bg-dark-bg border rounded-lg p-3 text-sm outline-none transition-colors ${data.isParseError && !data.artistName ? 'border-red-500/50 text-red-200' : 'border-gray-700 text-gray-200 focus:border-indigo-500'}`}
+                      />
                     </div>
-                  )}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 mt-2">Titolo Brano</label>
+                      <input
+                        type="text"
+                        value={data.songTitle}
+                        onChange={(e) => updateAudioFileData(data.id, 'songTitle', e.target.value)}
+                        placeholder="Titolo Brano"
+                        className={`w-full bg-dark-bg border rounded-lg p-3 text-sm outline-none transition-colors ${data.isParseError && !data.songTitle ? 'border-red-500/50 text-red-200' : 'border-gray-700 text-gray-200 focus:border-indigo-500'}`}
+                      />
+                    </div>
+                  </div>
 
-                  <label
-                    htmlFor={`image-upload-${data.id}`}
-                    className="inline-flex items-center justify-center gap-2 py-2 px-3 border border-dashed border-gray-600 rounded-lg text-xs text-gray-400 hover:text-white hover:border-pink-500 hover:bg-pink-500/10 cursor-pointer transition-all font-medium"
-                  >
-                    <ImageIcon size={14} />
-                    Aggiungi Foto Brano
-                    <input
-                      id={`image-upload-${data.id}`}
-                      type="file"
-                      onChange={(e) => handleImageChangeForFile(data.id, e)}
-                      accept="image/*"
-                      multiple
-                      className="hidden"
+                  {/* Specific Meta: Lyrics */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="inline-flex text-xs font-bold text-gray-400 uppercase tracking-widest gap-2 items-center">
+                        <AlignLeft size={14} /> Testo / Lyrics
+                      </label>
+                      {audioFilesData.length > 1 && (
+                        <button type="button" onClick={() => copyToAll('lyrics')} className="text-xs flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 px-2 py-1 rounded">
+                          <Copy size={12} /> Copia a Tutti
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      value={data.lyrics || ''}
+                      onChange={(e) => updateAudioFileData(data.id, 'lyrics', e.target.value)}
+                      placeholder="Incolla qui il testo di questo brano (opzionale)..."
+                      className="w-full bg-dark-bg border border-gray-700 rounded-lg p-4 text-gray-300 focus:outline-none focus:border-indigo-500 h-28 resize-y transition-all text-sm font-mono"
                     />
-                  </label>
+                  </div>
+
+                  {/* Specific Meta: Bio */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="inline-flex text-xs font-bold text-gray-400 uppercase tracking-widest gap-2 items-center">
+                        <FileText size={14} /> Biografia / Contesto
+                      </label>
+                      {audioFilesData.length > 1 && (
+                        <button type="button" onClick={() => copyToAll('bio')} className="text-xs flex items-center gap-1 text-accent-secondary hover:text-pink-300 transition-colors bg-accent-secondary/10 px-2 py-1 rounded">
+                          <Copy size={12} /> Copia a Tutti
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      value={data.bio || ''}
+                      onChange={(e) => updateAudioFileData(data.id, 'bio', e.target.value)}
+                      placeholder="Contesto o nota biografica per questo brano..."
+                      className="w-full bg-dark-bg border border-gray-700 rounded-lg p-4 text-gray-300 focus:outline-none focus:border-accent-secondary h-20 resize-y transition-all text-sm"
+                    />
+                  </div>
+
+                  {/* Specific Meta: Images */}
+                  <div className="pt-2">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="inline-flex text-xs font-bold text-gray-400 uppercase tracking-widest gap-2 items-center">
+                        <Camera size={14} /> Immagini Moda
+                      </label>
+                      {audioFilesData.length > 1 && data.images.length > 0 && (
+                        <button type="button" onClick={() => copyToAll('images')} className="text-xs flex items-center gap-1 text-pink-400 hover:text-pink-300 transition-colors bg-pink-500/10 px-2 py-1 rounded">
+                          <Copy size={12} /> Copia a Tutti
+                        </button>
+                      )}
+                    </div>
+                    {data.images.length > 0 && (
+                      <div className="flex flex-wrap gap-3 mb-3">
+                        {data.images.map((img, idx) => (
+                          <div key={idx} className="relative group rounded-md overflow-hidden border border-gray-600 w-20 h-20 shadow-lg">
+                            <img src={URL.createObjectURL(img)} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removeImageForFile(data.id, idx)}
+                              className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                            >
+                              <X className="text-white" size={20} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <label
+                      htmlFor={`image-upload-${data.id}`}
+                      className="inline-flex items-center justify-center gap-2 py-2 px-4 border border-dashed border-gray-600 rounded-lg text-sm text-gray-400 hover:text-white hover:border-pink-500 hover:bg-pink-500/10 cursor-pointer transition-all font-medium"
+                    >
+                      <ImageIcon size={16} />
+                      Carica Foto (Look)
+                      <input
+                        id={`image-upload-${data.id}`}
+                        type="file"
+                        onChange={(e) => handleImageChangeForFile(data.id, e)}
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })()}
           </div>
         </div>
       )}
 
+      {/* Text Only Inputs */}
+      {isTextOnly && (
+        <>
+          <div className="bg-dark-surface rounded-xl p-6 border border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.1)] mb-4">
+            <div className="flex items-center gap-2 mb-4">
+              <AlignLeft className="text-indigo-400" size={20} />
+              <h3 className="font-semibold text-white">
+                Testo / Lyrics <span className="text-xs text-indigo-400 ml-2 uppercase tracking-wider border border-indigo-500/30 px-2 py-0.5 rounded">Obbligatorio</span>
+              </h3>
+            </div>
+            <textarea
+              value={textOnlyLyrics}
+              onChange={(e) => setTextOnlyLyrics(e.target.value)}
+              placeholder="Incolla qui il testo della canzone per analizzarlo..."
+              className="w-full bg-dark-bg border border-gray-700 rounded-lg p-4 text-gray-300 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 h-40 resize-y transition-all placeholder-gray-600 font-mono text-sm leading-relaxed"
+            />
+          </div>
+          <div className="bg-dark-surface rounded-xl p-6 border border-gray-800 mb-4">
+            <div className="flex items-center gap-2 mb-4">
+              <FileText className="text-accent-secondary" size={20} />
+              <h3 className="font-semibold text-gray-200">Biografia Artista / Contesto</h3>
+            </div>
+            <textarea
+              value={textOnlyBio}
+              onChange={(e) => setTextOnlyBio(e.target.value)}
+              placeholder="Racconta qualcosa sull'artista, sul brano o sul genere... (opzionale)"
+              className="w-full bg-dark-bg border border-gray-700 rounded-lg p-4 text-gray-300 focus:outline-none focus:border-accent-secondary focus:ring-1 focus:ring-accent-secondary h-24 resize-none transition-all placeholder-gray-600"
+            />
+          </div>
+        </>
+      )}
 
-
-
-      {/* Shared Metadata (Tag / Bio) */}
+      {/* Shared Metadata (Tag) */}
       <div className="bg-dark-surface rounded-xl p-6 border border-gray-800 space-y-4">
         <h3 className="font-semibold text-gray-200 flex items-center gap-2">
-          <FileText size={18} /> Metadati Condivisi (per tutto il Batch)
+          <FileText size={18} /> Metadati Condivisi
         </h3>
         <input
           type="text"
           value={tag}
           onChange={(e) => setTag(e.target.value)}
-          placeholder="#Tag opzionale (es. Album 2026, Sanremo, ...)"
-          className="w-full bg-dark-bg border border-gray-700 rounded-lg p-3 text-gray-300 focus:outline-none focus:border-indigo-500 transition-all placeholder-gray-600"
-        />
-        <textarea
-          value={bio}
-          onChange={(e) => setBio(e.target.value)}
-          placeholder="Note biografe condivise o contesto generico (opzionale)..."
-          className="w-full bg-dark-bg border border-gray-700 rounded-lg p-4 text-gray-300 focus:outline-none focus:border-accent-secondary focus:ring-1 focus:ring-accent-secondary h-24 resize-none transition-all placeholder-gray-600"
-        />
-      </div>
-
-      {/* Lyrics Input */}
-      <div className={`bg-dark-surface rounded-xl p-6 border transition-colors ${isTextOnly ? 'border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.1)]' : 'border-gray-800'}`}>
-        <div className="flex items-center gap-2 mb-4">
-          <AlignLeft className={isTextOnly ? "text-indigo-400" : "text-gray-500"} size={20} />
-          <h3 className={`font-semibold ${isTextOnly ? "text-white" : "text-gray-400"}`}>
-            Testo / Lyrics {isTextOnly && <span className="text-xs text-indigo-400 ml-2 uppercase tracking-wider border border-indigo-500/30 px-2 py-0.5 rounded">Obbligatorio</span>}
-          </h3>
-        </div>
-        <textarea
-          value={lyrics}
-          onChange={(e) => setLyrics(e.target.value)}
-          placeholder={isTextOnly ? "Incolla qui il testo della canzone per analizzarlo..." : "Incolla qui il testo (opzionale, aiuta la comprensione)..."}
-          className="w-full bg-dark-bg border border-gray-700 rounded-lg p-4 text-gray-300 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 h-40 resize-y transition-all placeholder-gray-600 font-mono text-sm leading-relaxed"
-        />
-      </div>
-
-      {/* Bio Input */}
-      <div className="bg-dark-surface rounded-xl p-6 border border-gray-800">
-        <div className="flex items-center gap-2 mb-4">
-          <FileText className="text-accent-secondary" size={20} />
-          <h3 className="font-semibold text-gray-200">Biografia Artista / Contesto</h3>
-        </div>
-        <textarea
-          value={bio}
-          onChange={(e) => setBio(e.target.value)}
-          placeholder="Racconta qualcosa sull'artista, sul brano o sul genere..."
-          className="w-full bg-dark-bg border border-gray-700 rounded-lg p-4 text-gray-300 focus:outline-none focus:border-accent-secondary focus:ring-1 focus:ring-accent-secondary h-24 resize-none transition-all placeholder-gray-600"
+          placeholder="#Tag opzionale (es. Sanremo 2026, ...)"
+          className="w-full bg-dark-bg border border-gray-700 rounded-lg p-3 text-sm text-gray-300 focus:outline-none focus:border-indigo-500 transition-all placeholder-gray-600"
         />
       </div>
 
@@ -410,10 +603,10 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
         {allowSingle && (
           <button
             onClick={(e) => handleSubmit(e, false)}
-            disabled={isLoading || (isTextOnly ? !lyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect}
+            disabled={isLoading || (isTextOnly ? !textOnlyLyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect}
             className={`
               py-4 px-8 rounded-xl font-bold text-sm lg:text-base shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 w-full md:w-auto min-w-[200px]
-              ${isLoading || (isTextOnly ? !lyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect
+              ${isLoading || (isTextOnly ? !textOnlyLyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect
                 ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
                 : 'bg-white text-black hover:bg-gray-200'}
             `}
@@ -425,10 +618,10 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({
         {allowAll && (
           <button
             onClick={(e) => handleSubmit(e, true)}
-            disabled={isLoading || (isTextOnly ? !lyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect}
+            disabled={isLoading || (isTextOnly ? !textOnlyLyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect}
             className={`
               py-4 px-8 rounded-xl font-bold text-sm lg:text-base shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 w-full md:w-auto min-w-[200px]
-              ${isLoading || (isTextOnly ? !lyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect
+              ${isLoading || (isTextOnly ? !textOnlyLyrics.trim() : audioFilesData.length === 0) || !isPasswordCorrect
                 ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
                 : 'bg-gradient-to-r from-accent-primary to-accent-secondary text-white hover:opacity-90 hover:shadow-accent-primary/25'}
             `}

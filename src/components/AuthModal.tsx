@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { API_BASE_URL } from '../config';
 import { X, Loader2, Mail, Lock, LogIn, UserPlus, KeyRound, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,13 +40,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
             let payload = {};
 
             if (authMode === 'login') {
-                endpoint = '/api/auth/login';
+                endpoint = `${API_BASE_URL}/auth/login`;
                 payload = { username: email, password };
             } else if (authMode === 'register') {
-                endpoint = '/api/auth/register';
+                endpoint = `${API_BASE_URL}/auth/register`;
                 payload = { username: email, password };
             } else if (authMode === 'verify') {
-                endpoint = '/api/auth/verify';
+                endpoint = `${API_BASE_URL}/auth/verify`;
                 payload = { username: email, otpCode };
             }
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAnalysis } from '../contexts/AnalysisContext';
-import { PERSONAS } from '../constants';
+import { usePersonas } from '../contexts/PersonaContext';
 import { Loader2, Scissors, RotateCcw, Download, ArrowLeft } from 'lucide-react';
 import { exportToCSV } from '../services/exportService';
 import { exportToHTML } from '../services/htmlExportService';
@@ -23,6 +23,8 @@ export const DashboardView: React.FC = () => {
         setActiveResultPersona,
         resetAnalysis
     } = useAnalysis();
+
+    const { personas: PERSONAS } = usePersonas();
 
     const navigate = useNavigate();
 
